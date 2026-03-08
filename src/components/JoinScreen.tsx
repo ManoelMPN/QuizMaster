@@ -7,15 +7,22 @@ import { Participant } from '../types';
 
 interface JoinScreenProps {
   participants: Participant[];
+  onAdminLogin: () => void;
 }
 
-export default function JoinScreen({ participants }: JoinScreenProps) {
+export default function JoinScreen({ participants, onAdminLogin }: JoinScreenProps) {
   const code = "482915";
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const joinUrl = window.location.origin + "/join";
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+    <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative">
+      <button 
+        onClick={onAdminLogin}
+        className="absolute top-6 right-6 p-2 text-slate-600 hover:text-primary transition-colors text-sm font-bold uppercase tracking-widest"
+      >
+        Acesso Admin
+      </button>
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -63,7 +70,7 @@ export default function JoinScreen({ participants }: JoinScreenProps) {
           <div className="flex items-center justify-center -space-x-3 mb-4">
             {participants.slice(0, 5).map((p) => (
               <div key={p.id} className="size-12 rounded-full border-2 border-[#151022] bg-slate-800 flex items-center justify-center text-2xl shadow-lg">
-                {p.name.split(' ')[0]}
+                {p.avatar}
               </div>
             ))}
             {participants.length > 5 && (
@@ -89,27 +96,45 @@ export default function JoinScreen({ participants }: JoinScreenProps) {
         url={joinUrl} 
       />
 
-      <footer className="w-full max-w-7xl mx-auto mt-auto px-6 py-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-6 text-sm font-medium text-slate-500">
+      <footer className="w-full max-w-7xl mx-auto mt-auto px-6 py-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-sm font-medium text-slate-500">
           <div className="flex items-center gap-2">
             <Users size={18} className="text-primary" />
-            {participants.length} Entraram
+            <span className="text-white">{participants.length}</span> Entraram
           </div>
           <div className="flex items-center gap-2">
             <Timer size={18} className="text-primary" />
             Aguardando Início
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-slate-500">Compartilhar:</span>
-          <div className="flex gap-2">
-            <button className="p-2 rounded-lg bg-slate-800 text-slate-500 hover:text-primary transition-colors">
-              <Link2 size={20} />
-            </button>
-            <button className="p-2 rounded-lg bg-slate-800 text-slate-500 hover:text-primary transition-colors">
-              <Copy size={20} />
-            </button>
+        
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-slate-500">Compartilhar:</span>
+            <div className="flex gap-2">
+              <button className="p-2 rounded-lg bg-slate-800 text-slate-500 hover:text-primary transition-colors">
+                <Link2 size={20} />
+              </button>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(joinUrl);
+                  alert('Link copiado!');
+                }}
+                className="p-2 rounded-lg bg-slate-800 text-slate-500 hover:text-primary transition-colors"
+              >
+                <Copy size={20} />
+              </button>
+            </div>
           </div>
+          
+          <div className="h-4 w-px bg-white/10 hidden md:block" />
+          
+          <button 
+            onClick={onAdminLogin}
+            className="text-xs font-bold text-slate-600 hover:text-primary transition-colors uppercase tracking-widest"
+          >
+            Painel do Mestre
+          </button>
         </div>
       </footer>
     </div>

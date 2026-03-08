@@ -22,22 +22,32 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE,
     password TEXT,
-    name TEXT
+    name TEXT,
+    avatar TEXT
   );
-  CREATE TABLE IF NOT EXISTS participants (
+  CREATE TABLE IF NOT EXISTS quizzes (
     id TEXT PRIMARY KEY,
-    name TEXT UNIQUE,
-    points INTEGER DEFAULT 0,
-    avatar TEXT,
-    status TEXT,
-    joined_at INTEGER
+    title TEXT,
+    user_id TEXT,
+    created_at INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id)
   );
   CREATE TABLE IF NOT EXISTS questions (
     id TEXT PRIMARY KEY,
+    quiz_id TEXT,
     text TEXT,
     options TEXT, -- JSON array
     correct_option INTEGER,
-    time_limit INTEGER
+    time_limit INTEGER,
+    FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
+  );
+  CREATE TABLE IF NOT EXISTS participants (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    avatar TEXT,
+    points INTEGER DEFAULT 0,
+    status TEXT,
+    joined_at INTEGER
   );
   CREATE TABLE IF NOT EXISTS answers (
     participant_id TEXT,
@@ -48,6 +58,14 @@ db.exec(`
     PRIMARY KEY (participant_id, question_id)
   );
 `);
+
+// Migrations
+try {
+  db.prepare("ALTER TABLE questions ADD COLUMN quiz_id TEXT").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE participants ADD COLUMN joined_at INTEGER").run();
+} catch (e) {}
 
 async function startServer() {
   const app = express();
@@ -60,6 +78,7 @@ async function startServer() {
   // Game State
   let gameState = {
     currentQuestionId: null as string | null,
+    activeQuizId: null as string | null,
     status: 'waiting' as 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished',
     questionStartTime: 0,
     countdown: 0
@@ -67,14 +86,14 @@ async function startServer() {
 
   // Auth Routes
   app.post("/api/auth/register", async (req, res) => {
-    const { email, password, name } = req.body;
+    const { email, password, name, avatar } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = Math.random().toString(36).substr(2, 9);
     try {
-      db.prepare("INSERT INTO users (id, email, password, name) VALUES (?, ?, ?, ?)").run(id, email, hashedPassword, name);
-      const token = jwt.sign({ id, email, name }, JWT_SECRET);
+      db.prepare("INSERT INTO users (id, email, password, name, avatar) VALUES (?, ?, ?, ?, ?)").run(id, email, hashedPassword, name, avatar || "👤");
+      const token = jwt.sign({ id, email, name, avatar: avatar || "👤" }, JWT_SECRET);
       res.cookie("token", token, { httpOnly: true, secure: true, sameSite: 'none' });
-      res.json({ user: { id, email, name } });
+      res.json({ user: { id, email, name, avatar: avatar || "👤" } });
     } catch (err) {
       res.status(400).json({ error: "E-mail já cadastrado" });
     }
@@ -86,9 +105,32 @@ async function startServer() {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: "Credenciais inválidas" });
     }
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET);
+    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, avatar: user.avatar }, JWT_SECRET);
     res.cookie("token", token, { httpOnly: true, secure: true, sameSite: 'none' });
-    res.json({ user: { id: user.id, email: user.email, name: user.name } });
+    res.json({ user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar } });
+  });
+
+  app.post("/api/auth/update", async (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: "Não logado" });
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const { name, password, avatar } = req.body;
+      
+      if (password) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        db.prepare("UPDATE users SET name = ?, password = ?, avatar = ? WHERE id = ?").run(name, hashedPassword, avatar, decoded.id);
+      } else {
+        db.prepare("UPDATE users SET name = ?, avatar = ? WHERE id = ?").run(name, avatar, decoded.id);
+      }
+
+      const user: any = db.prepare("SELECT id, email, name, avatar FROM users WHERE id = ?").get(decoded.id);
+      const newToken = jwt.sign(user, JWT_SECRET);
+      res.cookie("token", newToken, { httpOnly: true, secure: true, sameSite: 'none' });
+      res.json({ user });
+    } catch (err) {
+      res.status(401).json({ error: "Erro ao atualizar perfil" });
+    }
   });
 
   app.get("/api/auth/me", (req, res) => {
@@ -107,9 +149,45 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Quiz Management Routes
+  app.get("/api/quizzes", (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: "Não logado" });
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const quizzes = db.prepare("SELECT * FROM quizzes WHERE user_id = ? ORDER BY created_at DESC").all(decoded.id);
+      res.json(quizzes);
+    } catch (err) {
+      res.status(401).json({ error: "Erro ao buscar quizzes" });
+    }
+  });
+
+  app.post("/api/quizzes", (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: "Não logado" });
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      const { title } = req.body;
+      const id = Math.random().toString(36).substr(2, 9);
+      db.prepare("INSERT INTO quizzes (id, title, user_id, created_at) VALUES (?, ?, ?, ?)")
+        .run(id, title, decoded.id, Date.now());
+      res.json({ id, title });
+    } catch (err) {
+      res.status(401).json({ error: "Erro ao criar quiz" });
+    }
+  });
+
+  app.delete("/api/quizzes/:id", (req, res) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: "Não logado" });
+    db.prepare("DELETE FROM questions WHERE quiz_id = ?").run(req.params.id);
+    db.prepare("DELETE FROM quizzes WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  });
+
   // Admin Question Routes
-  app.get("/api/questions", (req, res) => {
-    const questions = db.prepare("SELECT * FROM questions").all().map((q: any) => ({
+  app.get("/api/questions/:quizId", (req, res) => {
+    const questions = db.prepare("SELECT * FROM questions WHERE quiz_id = ?").all(req.params.quizId).map((q: any) => ({
       ...q,
       options: JSON.parse(q.options)
     }));
@@ -117,10 +195,10 @@ async function startServer() {
   });
 
   app.post("/api/questions", (req, res) => {
-    const { text, options, correctOption, timeLimit } = req.body;
+    const { quizId, text, options, correctOption, timeLimit } = req.body;
     const id = Math.random().toString(36).substr(2, 9);
-    db.prepare("INSERT INTO questions (id, text, options, correct_option, time_limit) VALUES (?, ?, ?, ?, ?)")
-      .run(id, text, JSON.stringify(options), correctOption, timeLimit);
+    db.prepare("INSERT INTO questions (id, quiz_id, text, options, correct_option, time_limit) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(id, quizId, text, JSON.stringify(options), correctOption, timeLimit);
     res.json({ id });
   });
 
@@ -134,9 +212,12 @@ async function startServer() {
     const usados = new Set<string>(db.prepare("SELECT name FROM participants").all().map((p: any) => p.name as string));
     const persona = gerarPersonaUnica(usados);
     const id = Math.random().toString(36).substr(2, 9);
-    db.prepare("INSERT INTO participants (id, name, points, joined_at) VALUES (?, ?, 0, ?)")
-      .run(id, persona, Date.now());
-    res.json({ id, name: persona });
+    const avatar = persona.split(' ')[0];
+    const name = persona.split(' ').slice(1).join(' ');
+    
+    db.prepare("INSERT INTO participants (id, name, avatar, points, joined_at) VALUES (?, ?, ?, 0, ?)")
+      .run(id, name, avatar, Date.now());
+    res.json({ id, name, avatar });
   });
 
   // WebSocket Logic
@@ -152,6 +233,11 @@ async function startServer() {
     ws.on("message", (message) => {
       const payload = JSON.parse(message.toString());
       
+      if (payload.type === "SELECT_QUIZ") {
+        gameState.activeQuizId = payload.quizId;
+        broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC").all(), gameState });
+      }
+
       if (payload.type === "START_COUNTDOWN") {
         gameState.status = 'countdown';
         gameState.countdown = 3;
@@ -186,6 +272,7 @@ async function startServer() {
 
       if (payload.type === "START_QUESTION") {
         gameState = {
+          ...gameState,
           currentQuestionId: payload.questionId,
           status: 'question',
           questionStartTime: Date.now(),
@@ -225,7 +312,7 @@ async function startServer() {
       if (payload.type === "RESET_GAME") {
         db.prepare("DELETE FROM participants").run();
         db.prepare("DELETE FROM answers").run();
-        gameState = { currentQuestionId: null, status: 'waiting', questionStartTime: 0, countdown: 0 };
+        gameState = { ...gameState, currentQuestionId: null, status: 'waiting', questionStartTime: 0, countdown: 0 };
         broadcast({ type: "SYNC", participants: [], gameState });
       }
     });

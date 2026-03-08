@@ -20,6 +20,13 @@ export default function ParticipantView({ participantId, participantName, gameSt
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(participantName);
 
+  // Sync tempName when participantName changes from parent (e.g. after join)
+  useEffect(() => {
+    if (!isEditing) {
+      setTempName(participantName);
+    }
+  }, [participantName, isEditing]);
+
   useEffect(() => {
     if (gameState.status === 'question' && currentQuestion) {
       const elapsed = Math.floor((Date.now() - (gameState.questionStartTime || 0)) / 1000);
@@ -53,7 +60,7 @@ export default function ParticipantView({ participantId, participantName, gameSt
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full">
+    <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 max-w-2xl mx-auto w-full">
       <AnimatePresence mode="wait">
         {gameState.status === 'waiting' && (
           <motion.div 
@@ -61,12 +68,14 @@ export default function ParticipantView({ participantId, participantName, gameSt
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="text-center space-y-6 w-full"
+            className="text-center space-y-6 w-full py-10"
           >
-            <div className="text-6xl mb-4">{participantName.split(' ')[0]}</div>
+            <div className="size-20 md:size-24 bg-primary/20 rounded-3xl flex items-center justify-center text-5xl md:text-6xl mx-auto shadow-2xl shadow-primary/10">
+              {participants.find(p => p.id === participantId)?.avatar || '👤'}
+            </div>
             
             {isEditing ? (
-              <div className="space-y-4 max-w-xs mx-auto">
+              <div className="space-y-4 max-w-xs mx-auto w-full">
                 <input 
                   type="text" 
                   value={tempName}
@@ -76,15 +85,15 @@ export default function ParticipantView({ participantId, participantName, gameSt
                 />
                 <button 
                   onClick={handleSaveName}
-                  className="w-full p-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20"
+                  className="w-full p-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform"
                 >
                   Salvar Nome
                 </button>
               </div>
             ) : (
               <div className="space-y-2">
-                <h1 className="text-3xl font-black text-white">Você está dentro!</h1>
-                <p className="text-xl text-primary font-bold">{participantName.split(' ').slice(1).join(' ')}</p>
+                <h1 className="text-2xl md:text-3xl font-black text-white">Você está dentro!</h1>
+                <p className="text-lg md:text-xl text-primary font-bold">{participantName}</p>
                 <button 
                   onClick={() => setIsEditing(true)}
                   className="text-slate-500 text-sm font-bold underline underline-offset-4 hover:text-primary transition-colors"
@@ -94,9 +103,9 @@ export default function ParticipantView({ participantId, participantName, gameSt
               </div>
             )}
 
-            <div className="pt-10 flex flex-col items-center gap-4">
-              <Loader2 className="animate-spin text-primary" size={40} />
-              <p className="text-slate-500 font-medium animate-pulse">Aguardando o início do quiz...</p>
+            <div className="pt-8 flex flex-col items-center gap-4">
+              <Loader2 className="animate-spin text-primary" size={32} />
+              <p className="text-slate-500 text-sm md:text-base font-medium animate-pulse px-4">Aguardando o mestre iniciar o quiz...</p>
             </div>
           </motion.div>
         )}

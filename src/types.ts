@@ -11,10 +11,19 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  avatar?: string;
+}
+
+export interface Quiz {
+  id: string;
+  title: string;
+  userId: string;
+  createdAt: number;
 }
 
 export interface Question {
   id: string;
+  quizId: string;
   text: string;
   options: string[];
   correctOption: number;
@@ -23,6 +32,7 @@ export interface Question {
 
 export interface GameState {
   currentQuestionId: string | null;
+  activeQuizId: string | null;
   status: 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished';
   questionStartTime?: number;
   countdown?: number;

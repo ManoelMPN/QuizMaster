@@ -19,6 +19,7 @@ export default function App() {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(localStorage.getItem('participantId'));
   const [participantName, setParticipantName] = useState<string | null>(localStorage.getItem('participantName'));
+  const [isJoining, setIsJoining] = useState(false);
   
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -30,19 +31,35 @@ export default function App() {
     });
 
     // Handle auto-join for participants
-    if (window.location.pathname === '/join' && !participantId) {
-      fetch('/api/join', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
+    const handleJoin = async () => {
+      if (window.location.pathname === '/join' && !isJoining) {
+        setIsJoining(true);
+        try {
+          const res = await fetch('/api/join', { method: 'POST' });
+          const data = await res.json();
           setParticipantId(data.id);
           setParticipantName(data.name);
           localStorage.setItem('participantId', data.id);
           localStorage.setItem('participantName', data.name);
+          localStorage.setItem('participantAvatar', data.avatar);
           setCurrentScreen('participant');
-        });
-    } else if (participantId) {
-      setCurrentScreen('participant');
-    }
+        } catch (err) {
+          console.error("Join error:", err);
+        } finally {
+          setIsJoining(false);
+        }
+      } else if (participantId) {
+        // Ensure we have a name if we have an ID
+        if (!participantName) {
+          // If we have an ID but no name, we might need to fetch it or just let the user set it
+          // For now, let's just default to a placeholder if it's missing from localStorage
+          setParticipantName("Participante");
+        }
+        setCurrentScreen('participant');
+      }
+    };
+
+    handleJoin();
 
     // WebSocket Connection
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -73,6 +90,10 @@ export default function App() {
     await logout();
     setUser(null);
     setCurrentScreen('join');
+  };
+
+  const selectQuiz = (quizId: string) => {
+    socketRef.current?.send(JSON.stringify({ type: 'SELECT_QUIZ', quizId }));
   };
 
   const startQuestion = (questionId: string) => {
@@ -157,21 +178,24 @@ export default function App() {
           className="flex-1 flex flex-col"
         >
           {currentScreen === 'auth' && <Auth onSuccess={handleAuthSuccess} />}
-          {currentScreen === 'join' && <JoinScreen participants={participants} />}
+          {currentScreen === 'join' && <JoinScreen participants={participants} onAdminLogin={() => setCurrentScreen('auth')} />}
           {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} currentParticipantId={participantId} />}
           {currentScreen === 'admin' && user && (
             <AdminDashboard 
+              user={user}
               participants={participants} 
               gameState={gameState} 
               onStartQuestion={startCountdown}
               onShowRanking={showRanking}
               onResetGame={resetGame}
+              onSelectQuiz={selectQuiz}
+              onUpdateUser={setUser}
             />
           )}
-          {currentScreen === 'participant' && participantId && participantName && (
+          {currentScreen === 'participant' && participantId && (
             <ParticipantView 
               participantId={participantId}
-              participantName={participantName}
+              participantName={participantName || "Participante"}
               gameState={gameState}
               currentQuestion={currentQuestion}
               onSubmitAnswer={submitAnswer}
