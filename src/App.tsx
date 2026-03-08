@@ -66,6 +66,10 @@ export default function App() {
     const socket = new WebSocket(`${protocol}//${window.location.host}`);
     socketRef.current = socket;
 
+    socket.onopen = () => console.log("[WS] Connected to server");
+    socket.onerror = (err) => console.error("[WS] Connection error:", err);
+    socket.onclose = () => console.log("[WS] Disconnected from server");
+
     socket.onmessage = (event) => {
       const payload = JSON.parse(event.data);
       if (payload.type === 'SYNC' || payload.type === 'RANKING_UPDATE') {
@@ -129,10 +133,33 @@ export default function App() {
     }));
   };
 
+  const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok || res.status === 401) setServerStatus('online');
+        else setServerStatus('offline');
+      } catch (e) {
+        setServerStatus('offline');
+      }
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (loading) return null;
 
   return (
     <Layout title={user ? `Admin: ${user.name}` : participantName ? `Participando como ${participantName}` : "Quiz Master"}>
+      <div className="fixed bottom-4 left-4 z-[100] flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-white/5 backdrop-blur-sm">
+        <div className={`size-2 rounded-full ${serverStatus === 'online' ? 'bg-emerald-500 animate-pulse' : serverStatus === 'offline' ? 'bg-red-500' : 'bg-amber-500'}`} />
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          {serverStatus === 'online' ? 'Servidor Online' : serverStatus === 'offline' ? 'Servidor Offline' : 'Verificando...'}
+        </span>
+      </div>
       {user && (
         <div className="fixed top-20 right-6 z-[100] flex items-center gap-4">
           <div className="flex gap-2">

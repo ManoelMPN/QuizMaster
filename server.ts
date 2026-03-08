@@ -10,11 +10,21 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { gerarPersonaUnica } from "./src/constants";
 
+console.log("[SERVER] Starting server.ts...");
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || "quiz-master-secret-key";
-const db = new Database("quiz.db");
+let db: any;
+try {
+  console.log("[SERVER] Initializing database...");
+  db = new Database("quiz.db");
+  console.log("[SERVER] Database initialized.");
+} catch (err) {
+  console.error("[SERVER] Failed to initialize database:", err);
+  process.exit(1);
+}
 
 // Database Initialization
 db.exec(`
@@ -77,7 +87,7 @@ async function startServer() {
 
   // Logging middleware
   app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
+    console.log(`[SERVER] ${req.method} ${req.url}`);
     next();
   });
 
@@ -344,6 +354,12 @@ async function startServer() {
     });
   };
 
+  // API 404 handler - prevent falling through to Vite for API calls
+  app.use("/api", (req, res) => {
+    console.log(`[404] API Route not found: ${req.method} ${req.url}`);
+    res.status(404).json({ error: `Rota API não encontrada: ${req.method} ${req.originalUrl}` });
+  });
+
   // Vite Integration
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -366,8 +382,18 @@ async function startServer() {
 
   const PORT = 3000;
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
+    console.log(`[SERVER] Servidor rodando em http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+process.on('uncaughtException', (err) => {
+  console.error('[SERVER] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[SERVER] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+startServer().catch(err => {
+  console.error("[SERVER] Failed to start server:", err);
+});
