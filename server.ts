@@ -8,21 +8,27 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
-import { gerarPersonaUnica } from "./src/constants";
+import { gerarPersonaUnica } from "./src/constants.ts";
 
 console.log("[SERVER] Starting server.ts...");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+console.log("[SERVER] Environment:", {
+  NODE_ENV: process.env.NODE_ENV,
+  cwd: process.cwd(),
+  __dirname
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || "quiz-master-secret-key";
 let db: any;
 try {
-  console.log("[SERVER] Initializing database...");
+  console.log("[SERVER] Initializing database at quiz.db...");
   db = new Database("quiz.db");
-  console.log("[SERVER] Database initialized.");
+  console.log("[SERVER] Database initialized successfully.");
 } catch (err) {
-  console.error("[SERVER] Failed to initialize database:", err);
+  console.error("[SERVER] CRITICAL: Failed to initialize database:", err);
   process.exit(1);
 }
 
@@ -85,6 +91,20 @@ async function startServer() {
   app.use(express.json());
   app.use(cookieParser());
 
+  // JSON Error Handling
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      console.error("[SERVER] JSON Parse Error:", err.message);
+      return res.status(400).json({ error: "JSON inválido enviado ao servidor" });
+    }
+    next(err);
+  });
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: Date.now() });
+  });
+
   // Logging middleware
   app.use((req, res, next) => {
     console.log(`[SERVER] ${req.method} ${req.url}`);
@@ -102,6 +122,7 @@ async function startServer() {
 
   // Auth Routes
   app.post("/api/auth/register", async (req, res) => {
+    console.log("[AUTH] Register attempt:", req.body?.email);
     try {
       const { email, password, name, avatar } = req.body;
       if (!email || !password || !name) {
@@ -114,23 +135,32 @@ async function startServer() {
       res.cookie("token", token, { httpOnly: true, secure: true, sameSite: 'none' });
       res.json({ user: { id, email, name, avatar: avatar || "👤" } });
     } catch (err: any) {
-      console.error("Register error:", err);
+      console.error("[AUTH] Register error:", err);
       if (err.message?.includes("UNIQUE")) {
         return res.status(400).json({ error: "E-mail já cadastrado" });
       }
-      res.status(500).json({ error: "Erro interno no servidor" });
+      res.status(500).json({ error: "Erro interno no servidor ao cadastrar" });
     }
   });
 
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
-    const user: any = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: "Credenciais inválidas" });
+    console.log("[AUTH] Login attempt:", req.body?.email);
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "E-mail e senha são obrigatórios" });
+      }
+      const user: any = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: "Credenciais inválidas" });
+      }
+      const token = jwt.sign({ id: user.id, email: user.email, name: user.name, avatar: user.avatar }, JWT_SECRET);
+      res.cookie("token", token, { httpOnly: true, secure: true, sameSite: 'none' });
+      res.json({ user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar } });
+    } catch (err) {
+      console.error("[AUTH] Login error:", err);
+      res.status(500).json({ error: "Erro interno no servidor ao fazer login" });
     }
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name, avatar: user.avatar }, JWT_SECRET);
-    res.cookie("token", token, { httpOnly: true, secure: true, sameSite: 'none' });
-    res.json({ user: { id: user.id, email: user.email, name: user.name, avatar: user.avatar } });
   });
 
   app.post("/api/auth/update", async (req, res) => {
@@ -232,6 +262,11 @@ async function startServer() {
 
   // Participant Join (No login)
   app.post("/api/join", (req, res) => {
+    const count: any = db.prepare("SELECT COUNT(*) as total FROM participants").get();
+    if (count.total >= 500) {
+      return res.status(403).json({ error: "Limite de 500 participantes atingido. Aguarde a próxima rodada!" });
+    }
+
     const usados = new Set<string>(db.prepare("SELECT name FROM participants").all().map((p: any) => p.name as string));
     const persona = gerarPersonaUnica(usados);
     const id = Math.random().toString(36).substr(2, 9);
@@ -250,7 +285,7 @@ async function startServer() {
     ws.on("close", () => clients.delete(ws));
     
     // Send initial state
-    const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC").all();
+    const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
     ws.send(JSON.stringify({ type: "SYNC", participants, gameState }));
 
     ws.on("message", (message) => {
@@ -259,7 +294,7 @@ async function startServer() {
         
         if (payload.type === "SELECT_QUIZ") {
         gameState.activeQuizId = payload.quizId;
-        broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC").all(), gameState });
+        broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all(), gameState });
       }
 
       if (payload.type === "START_COUNTDOWN") {
@@ -278,16 +313,24 @@ async function startServer() {
             const question: any = db.prepare("SELECT * FROM questions WHERE id = ?").get(gameState.currentQuestionId);
             broadcast({ type: "QUESTION_STARTED", question: { ...question, options: JSON.parse(question.options) }, gameState });
           } else {
-            broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC").all(), gameState });
+            broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all(), gameState });
           }
         }, 1000);
       }
 
       if (payload.type === "UPDATE_NAME") {
         const { participantId, newName } = payload;
+        const forbidden = ["xerecard", "corno", "puta", "caralho", "foda", "pica", "rola", "buceta"];
+        const isVulgar = forbidden.some(word => newName.toLowerCase().includes(word));
+        
+        if (isVulgar) {
+          // Ignore vulgar names
+          return;
+        }
+
         try {
           db.prepare("UPDATE participants SET name = ? WHERE id = ?").run(newName, participantId);
-          const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC").all();
+          const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
           broadcast({ type: "SYNC", participants, gameState });
         } catch (e) {
           // Name already exists or other error
@@ -329,7 +372,7 @@ async function startServer() {
 
       if (payload.type === "SHOW_RANKING") {
         gameState.status = 'ranking';
-        const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC").all();
+        const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
         broadcast({ type: "RANKING_UPDATE", participants, gameState });
       }
 
@@ -381,8 +424,9 @@ async function startServer() {
   });
 
   const PORT = 3000;
+  console.log(`[SERVER] Attempting to listen on port ${PORT}...`);
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`[SERVER] Servidor rodando em http://0.0.0.0:${PORT}`);
+    console.log(`[SERVER] SUCCESS: Servidor rodando em http://0.0.0.0:${PORT}`);
   });
 }
 
@@ -394,6 +438,8 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[SERVER] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-startServer().catch(err => {
+startServer().then(() => {
+  console.log("[SERVER] startServer() promise resolved.");
+}).catch(err => {
   console.error("[SERVER] Failed to start server:", err);
 });

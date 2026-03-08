@@ -75,15 +75,15 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
                       transition={{ repeat: Infinity, duration: 3 }}
                       className="absolute -top-10 md:-top-14 left-1/2 -translate-x-1/2 text-yellow-400"
                     >
-                      <Crown size={32} className="md:w-12 md:h-12" fill="currentColor" />
+                      <Crown size={32} className="md:w-12 md:h-12 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]" fill="currentColor" />
                     </motion.div>
                   )}
-                  <div className={`rounded-full border-2 md:border-4 ${borderColor} p-0.5 md:p-1 flex items-center justify-center bg-slate-800 ${isFirst ? 'w-24 h-24 md:w-40 md:h-40 shadow-[0_0_30px_rgba(234,179,8,0.3)]' : isSecond ? 'w-20 h-20 md:w-32 md:h-32' : 'w-16 h-16 md:w-28 md:h-28'}`}>
+                  <div className={`relative z-10 rounded-full border-2 md:border-4 ${borderColor} p-0.5 md:p-1 flex items-center justify-center bg-slate-800 ${isFirst ? 'w-24 h-24 md:w-40 md:h-40 shadow-[0_0_30px_rgba(234,179,8,0.3)]' : isSecond ? 'w-20 h-20 md:w-32 md:h-32' : 'w-16 h-16 md:w-28 md:h-28'}`}>
                     <span className={isFirst ? 'text-4xl md:text-7xl' : isSecond ? 'text-3xl md:text-6xl' : 'text-2xl md:text-5xl'}>
                       {p.avatar}
                     </span>
                   </div>
-                  <div className={`absolute -bottom-1 -right-1 md:-bottom-2 md:-right-2 ${rankBg} rounded-full flex items-center justify-center font-black shadow-lg ${isFirst ? 'w-10 h-10 md:w-14 md:h-14 text-sm md:text-2xl' : isSecond ? 'w-8 h-8 md:w-12 md:h-12 text-xs md:text-xl' : 'w-7 h-7 md:w-10 md:h-10 text-[10px] md:text-lg'}`}>
+                  <div className={`absolute -bottom-1 -right-1 md:-bottom-2 md:-right-2 z-20 ${rankBg} rounded-full flex items-center justify-center font-black shadow-lg ${isFirst ? 'w-10 h-10 md:w-14 md:h-14 text-sm md:text-2xl' : isSecond ? 'w-8 h-8 md:w-12 md:h-12 text-xs md:text-xl' : 'w-7 h-7 md:w-10 md:h-10 text-[10px] md:text-lg'}`}>
                     {rank}
                   </div>
                 </div>
@@ -179,13 +179,13 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
             exit={{ opacity: 0, y: 20 }}
             className="fixed bottom-10 right-10 hidden md:block"
           >
-            <div className="bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-3">
-              <div className="size-10 bg-yellow-400 rounded-xl flex items-center justify-center text-slate-900">
-                <Trophy size={20} />
-              </div>
+            <div className="bg-slate-800/90 backdrop-blur-xl p-4 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-4">
               <div>
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Líder Atual</p>
-                <p className="font-black text-white">{top3[0]?.name}</p>
+                <p className="font-black text-white text-lg">{top3[0]?.name}</p>
+              </div>
+              <div className="size-12 bg-yellow-400 rounded-xl flex items-center justify-center text-slate-900 shadow-[0_0_15px_rgba(234,179,8,0.4)]">
+                <Crown size={24} fill="currentColor" />
               </div>
             </div>
           </motion.div>

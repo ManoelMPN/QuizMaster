@@ -58,7 +58,7 @@ export default function AdminDashboard({
           <div className="flex min-w-max">
             <button 
               onClick={() => {
-                window.open('/join', '_blank');
+                window.open('/join?present=true', '_blank');
               }}
               className="flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-xl font-bold transition-all text-slate-400 hover:text-white whitespace-nowrap"
               title="Abrir tela de entrada com QR Code"

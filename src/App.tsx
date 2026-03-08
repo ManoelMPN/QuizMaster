@@ -20,6 +20,7 @@ export default function App() {
   const [participantId, setParticipantId] = useState<string | null>(localStorage.getItem('participantId'));
   const [participantName, setParticipantName] = useState<string | null>(localStorage.getItem('participantName'));
   const [isJoining, setIsJoining] = useState(false);
+  const [isPresentMode, setIsPresentMode] = useState(new URLSearchParams(window.location.search).get('present') === 'true');
   
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -32,17 +33,26 @@ export default function App() {
 
     // Handle auto-join for participants
     const handleJoin = async () => {
+      if (isPresentMode) {
+        setCurrentScreen('join');
+        return;
+      }
+
       if (window.location.pathname === '/join' && !isJoining) {
         setIsJoining(true);
         try {
           const res = await fetch('/api/join', { method: 'POST' });
           const data = await res.json();
-          setParticipantId(data.id);
-          setParticipantName(data.name);
-          localStorage.setItem('participantId', data.id);
-          localStorage.setItem('participantName', data.name);
-          localStorage.setItem('participantAvatar', data.avatar);
-          setCurrentScreen('participant');
+          if (res.ok) {
+            setParticipantId(data.id);
+            setParticipantName(data.name);
+            localStorage.setItem('participantId', data.id);
+            localStorage.setItem('participantName', data.name);
+            localStorage.setItem('participantAvatar', data.avatar);
+            setCurrentScreen('participant');
+          } else {
+            alert(data.error || "Não foi possível entrar no quiz.");
+          }
         } catch (err) {
           console.error("Join error:", err);
         } finally {
@@ -138,8 +148,8 @@ export default function App() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok || res.status === 401) setServerStatus('online');
+        const res = await fetch('/api/health');
+        if (res.ok) setServerStatus('online');
         else setServerStatus('offline');
       } catch (e) {
         setServerStatus('offline');
@@ -204,31 +214,37 @@ export default function App() {
           transition={{ duration: 0.3 }}
           className="flex-1 flex flex-col"
         >
-          {currentScreen === 'auth' && <Auth onSuccess={handleAuthSuccess} />}
-          {currentScreen === 'join' && <JoinScreen participants={participants} onAdminLogin={() => setCurrentScreen('auth')} />}
-          {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} currentParticipantId={participantId} />}
-          {currentScreen === 'admin' && user && (
-            <AdminDashboard 
-              user={user}
-              participants={participants} 
-              gameState={gameState} 
-              onStartQuestion={startCountdown}
-              onShowRanking={showRanking}
-              onResetGame={resetGame}
-              onSelectQuiz={selectQuiz}
-              onUpdateUser={setUser}
-            />
-          )}
-          {currentScreen === 'participant' && participantId && (
-            <ParticipantView 
-              participantId={participantId}
-              participantName={participantName || "Participante"}
-              gameState={gameState}
-              currentQuestion={currentQuestion}
-              onSubmitAnswer={submitAnswer}
-              onUpdateName={updateName}
-              participants={participants}
-            />
+          {isPresentMode ? (
+            <JoinScreen participants={participants} onAdminLogin={() => setIsPresentMode(false)} />
+          ) : (
+            <>
+              {currentScreen === 'auth' && <Auth onSuccess={handleAuthSuccess} />}
+              {currentScreen === 'join' && <JoinScreen participants={participants} onAdminLogin={() => setCurrentScreen('auth')} />}
+              {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} currentParticipantId={participantId} />}
+              {currentScreen === 'admin' && user && (
+                <AdminDashboard 
+                  user={user}
+                  participants={participants} 
+                  gameState={gameState} 
+                  onStartQuestion={startCountdown}
+                  onShowRanking={showRanking}
+                  onResetGame={resetGame}
+                  onSelectQuiz={selectQuiz}
+                  onUpdateUser={setUser}
+                />
+              )}
+              {currentScreen === 'participant' && participantId && (
+                <ParticipantView 
+                  participantId={participantId}
+                  participantName={participantName || "Participante"}
+                  gameState={gameState}
+                  currentQuestion={currentQuestion}
+                  onSubmitAnswer={submitAnswer}
+                  onUpdateName={updateName}
+                  participants={participants}
+                />
+              )}
+            </>
           )}
         </motion.div>
       </AnimatePresence>
