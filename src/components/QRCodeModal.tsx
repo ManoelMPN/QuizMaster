@@ -39,13 +39,14 @@ export default function QRCodeModal({ isOpen, onClose, url }: QRCodeModalProps) 
               <p className="text-slate-400">Aponte a câmera do seu celular para o código abaixo</p>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl inline-block mb-10 shadow-2xl shadow-primary/20">
+            <div className="bg-white p-4 md:p-8 rounded-3xl inline-block mb-10 shadow-2xl shadow-primary/20 w-full max-w-[320px] aspect-square flex items-center justify-center mx-auto">
               <QRCodeSVG 
                 value={url} 
-                size={320} 
+                size={256} 
                 level="H"
                 includeMargin={false}
                 fgColor="#151022"
+                className="w-full h-full"
               />
             </div>
 

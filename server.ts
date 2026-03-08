@@ -60,8 +60,9 @@ async function startServer() {
   // Game State
   let gameState = {
     currentQuestionId: null as string | null,
-    status: 'waiting' as 'waiting' | 'question' | 'ranking' | 'finished',
-    questionStartTime: 0
+    status: 'waiting' as 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished',
+    questionStartTime: 0,
+    countdown: 0
   };
 
   // Auth Routes
@@ -151,11 +152,44 @@ async function startServer() {
     ws.on("message", (message) => {
       const payload = JSON.parse(message.toString());
       
+      if (payload.type === "START_COUNTDOWN") {
+        gameState.status = 'countdown';
+        gameState.countdown = 3;
+        gameState.currentQuestionId = payload.questionId;
+        broadcast({ type: "COUNTDOWN_STARTED", gameState });
+        
+        const timer = setInterval(() => {
+          gameState.countdown! -= 1;
+          if (gameState.countdown! < 0) {
+            clearInterval(timer);
+            // Start the question automatically after countdown
+            gameState.status = 'question';
+            gameState.questionStartTime = Date.now();
+            const question: any = db.prepare("SELECT * FROM questions WHERE id = ?").get(gameState.currentQuestionId);
+            broadcast({ type: "QUESTION_STARTED", question: { ...question, options: JSON.parse(question.options) }, gameState });
+          } else {
+            broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC").all(), gameState });
+          }
+        }, 1000);
+      }
+
+      if (payload.type === "UPDATE_NAME") {
+        const { participantId, newName } = payload;
+        try {
+          db.prepare("UPDATE participants SET name = ? WHERE id = ?").run(newName, participantId);
+          const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC").all();
+          broadcast({ type: "SYNC", participants, gameState });
+        } catch (e) {
+          // Name already exists or other error
+        }
+      }
+
       if (payload.type === "START_QUESTION") {
         gameState = {
           currentQuestionId: payload.questionId,
           status: 'question',
-          questionStartTime: Date.now()
+          questionStartTime: Date.now(),
+          countdown: 0
         };
         const question: any = db.prepare("SELECT * FROM questions WHERE id = ?").get(payload.questionId);
         broadcast({ type: "QUESTION_STARTED", question: { ...question, options: JSON.parse(question.options) }, gameState });
@@ -191,7 +225,7 @@ async function startServer() {
       if (payload.type === "RESET_GAME") {
         db.prepare("DELETE FROM participants").run();
         db.prepare("DELETE FROM answers").run();
-        gameState = { currentQuestionId: null, status: 'waiting', questionStartTime: 0 };
+        gameState = { currentQuestionId: null, status: 'waiting', questionStartTime: 0, countdown: 0 };
         broadcast({ type: "SYNC", participants: [], gameState });
       }
     });

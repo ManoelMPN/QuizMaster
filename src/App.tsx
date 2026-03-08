@@ -79,6 +79,17 @@ export default function App() {
     socketRef.current?.send(JSON.stringify({ type: 'START_QUESTION', questionId }));
   };
 
+  const startCountdown = (questionId: string) => {
+    socketRef.current?.send(JSON.stringify({ type: 'START_COUNTDOWN', questionId }));
+  };
+
+  const updateName = (newName: string) => {
+    if (!participantId) return;
+    socketRef.current?.send(JSON.stringify({ type: 'UPDATE_NAME', participantId, newName }));
+    setParticipantName(newName);
+    localStorage.setItem('participantName', newName);
+  };
+
   const showRanking = () => {
     socketRef.current?.send(JSON.stringify({ type: 'SHOW_RANKING' }));
   };
@@ -147,12 +158,12 @@ export default function App() {
         >
           {currentScreen === 'auth' && <Auth onSuccess={handleAuthSuccess} />}
           {currentScreen === 'join' && <JoinScreen participants={participants} />}
-          {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} />}
+          {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} currentParticipantId={participantId} />}
           {currentScreen === 'admin' && user && (
             <AdminDashboard 
               participants={participants} 
               gameState={gameState} 
-              onStartQuestion={startQuestion}
+              onStartQuestion={startCountdown}
               onShowRanking={showRanking}
               onResetGame={resetGame}
             />
@@ -164,6 +175,8 @@ export default function App() {
               gameState={gameState}
               currentQuestion={currentQuestion}
               onSubmitAnswer={submitAnswer}
+              onUpdateName={updateName}
+              participants={participants}
             />
           )}
         </motion.div>

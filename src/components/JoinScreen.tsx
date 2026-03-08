@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { QrCode, Users, Timer, Link2, Copy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import QRCodeModal from './QRCodeModal';
 import { Participant } from '../types';
 
@@ -37,9 +38,16 @@ export default function JoinScreen({ participants }: JoinScreenProps) {
           <div className="flex flex-col items-center gap-6">
             <div 
               onClick={() => setIsQRModalOpen(true)}
-              className="bg-white p-4 rounded-2xl cursor-pointer hover:scale-105 transition-transform shadow-2xl shadow-primary/10"
+              className="bg-white p-4 rounded-2xl cursor-pointer hover:scale-105 transition-transform shadow-2xl shadow-primary/10 w-full max-w-[240px] aspect-square flex items-center justify-center"
             >
-              <QrCode size={200} className="text-slate-900" />
+              <QRCodeSVG 
+                value={joinUrl} 
+                size={200} 
+                level="H"
+                includeMargin={false}
+                fgColor="#151022"
+                className="w-full h-full"
+              />
             </div>
             <button 
               onClick={() => setIsQRModalOpen(true)}

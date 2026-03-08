@@ -23,8 +23,9 @@ export interface Question {
 
 export interface GameState {
   currentQuestionId: string | null;
-  status: 'waiting' | 'question' | 'ranking' | 'finished';
+  status: 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished';
   questionStartTime?: number;
+  countdown?: number;
 }
 
 export type Screen = 'auth' | 'join' | 'leaderboard' | 'admin' | 'participant';
