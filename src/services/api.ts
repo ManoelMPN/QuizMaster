@@ -1,13 +1,30 @@
 import { User, Quiz, Question } from '../types';
 
+async function handleResponse(res: Response) {
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro na requisição');
+    return data;
+  } else {
+    const text = await res.text();
+    if (!res.ok) {
+      // If it's a 404 or other error with HTML body, give a cleaner message
+      if (res.status === 404) throw new Error('Servidor não encontrado (404). Verifique se o backend está rodando.');
+      throw new Error(`Erro do servidor (${res.status}): ${text.slice(0, 100)}...`);
+    }
+    return text;
+  }
+}
+
 export async function login(email: string, password: string): Promise<User> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) throw new Error((await res.json()).error);
-  return (await res.json()).user;
+  const data = await handleResponse(res);
+  return data.user;
 }
 
 export async function register(email: string, password: string, name: string, avatar: string): Promise<User> {
@@ -16,8 +33,8 @@ export async function register(email: string, password: string, name: string, av
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, name, avatar }),
   });
-  if (!res.ok) throw new Error((await res.json()).error);
-  return (await res.json()).user;
+  const data = await handleResponse(res);
+  return data.user;
 }
 
 export async function updateProfile(data: { name: string; password?: string; avatar: string }): Promise<User> {
@@ -26,14 +43,13 @@ export async function updateProfile(data: { name: string; password?: string; ava
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error((await res.json()).error);
-  return (await res.json()).user;
+  const response = await handleResponse(res);
+  return response.user;
 }
 
 export async function getQuizzes(): Promise<Quiz[]> {
   const res = await fetch('/api/quizzes');
-  if (!res.ok) throw new Error('Falha ao carregar quizzes');
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function createQuiz(title: string): Promise<Quiz> {
@@ -42,18 +58,17 @@ export async function createQuiz(title: string): Promise<Quiz> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
   });
-  if (!res.ok) throw new Error('Falha ao criar quiz');
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function deleteQuiz(id: string): Promise<void> {
-  await fetch(`/api/quizzes/${id}`, { method: 'DELETE' });
+  const res = await fetch(`/api/quizzes/${id}`, { method: 'DELETE' });
+  await handleResponse(res);
 }
 
 export async function getQuestions(quizId: string): Promise<Question[]> {
   const res = await fetch(`/api/questions/${quizId}`);
-  if (!res.ok) throw new Error('Falha ao carregar perguntas');
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function createQuestion(data: Omit<Question, 'id'>): Promise<{ id: string }> {
@@ -62,16 +77,21 @@ export async function createQuestion(data: Omit<Question, 'id'>): Promise<{ id: 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Falha ao criar pergunta');
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function getMe(): Promise<User | null> {
-  const res = await fetch('/api/auth/me');
-  if (!res.ok) return null;
-  return (await res.json()).user;
+  try {
+    const res = await fetch('/api/auth/me');
+    if (!res.ok) return null;
+    const data = await handleResponse(res);
+    return data.user;
+  } catch (err) {
+    return null;
+  }
 }
 
 export async function logout(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  const res = await fetch('/api/auth/logout', { method: 'POST' });
+  await handleResponse(res);
 }

@@ -75,6 +75,12 @@ async function startServer() {
   app.use(express.json());
   app.use(cookieParser());
 
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+
   // Game State
   let gameState = {
     currentQuestionId: null as string | null,
@@ -86,16 +92,23 @@ async function startServer() {
 
   // Auth Routes
   app.post("/api/auth/register", async (req, res) => {
-    const { email, password, name, avatar } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const id = Math.random().toString(36).substr(2, 9);
     try {
+      const { email, password, name, avatar } = req.body;
+      if (!email || !password || !name) {
+        return res.status(400).json({ error: "Preencha todos os campos" });
+      }
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const id = Math.random().toString(36).substr(2, 9);
       db.prepare("INSERT INTO users (id, email, password, name, avatar) VALUES (?, ?, ?, ?, ?)").run(id, email, hashedPassword, name, avatar || "👤");
       const token = jwt.sign({ id, email, name, avatar: avatar || "👤" }, JWT_SECRET);
       res.cookie("token", token, { httpOnly: true, secure: true, sameSite: 'none' });
       res.json({ user: { id, email, name, avatar: avatar || "👤" } });
-    } catch (err) {
-      res.status(400).json({ error: "E-mail já cadastrado" });
+    } catch (err: any) {
+      console.error("Register error:", err);
+      if (err.message?.includes("UNIQUE")) {
+        return res.status(400).json({ error: "E-mail já cadastrado" });
+      }
+      res.status(500).json({ error: "Erro interno no servidor" });
     }
   });
 
@@ -231,9 +244,10 @@ async function startServer() {
     ws.send(JSON.stringify({ type: "SYNC", participants, gameState }));
 
     ws.on("message", (message) => {
-      const payload = JSON.parse(message.toString());
-      
-      if (payload.type === "SELECT_QUIZ") {
+      try {
+        const payload = JSON.parse(message.toString());
+        
+        if (payload.type === "SELECT_QUIZ") {
         gameState.activeQuizId = payload.quizId;
         broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC").all(), gameState });
       }
@@ -315,8 +329,11 @@ async function startServer() {
         gameState = { ...gameState, currentQuestionId: null, status: 'waiting', questionStartTime: 0, countdown: 0 };
         broadcast({ type: "SYNC", participants: [], gameState });
       }
-    });
+    } catch (e) {
+      console.error("WebSocket message error:", e);
+    }
   });
+});
 
   const broadcast = (message: any) => {
     const payload = JSON.stringify(message);
@@ -340,6 +357,12 @@ async function startServer() {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
+
+  // Error handling middleware
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Unhandled error:", err);
+    res.status(500).json({ error: "Erro interno no servidor" });
+  });
 
   const PORT = 3000;
   server.listen(PORT, "0.0.0.0", () => {
