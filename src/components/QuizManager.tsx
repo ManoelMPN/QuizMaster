@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Play, List, ChevronRight, Save, X } from 'lucide-react';
+import { Plus, Trash2, Play, List, ChevronRight, Save, X, RefreshCw } from 'lucide-react';
 import { Quiz, Question } from '../types';
 import { getQuizzes, createQuiz, deleteQuiz, getQuestions, createQuestion } from '../services/api';
 
@@ -73,15 +73,37 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
     }
   };
 
-  const handleAddQuestion = async () => {
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+
+  const handleAddOrUpdateQuestion = async () => {
     if (!selectedQuiz || !newQuestion.text || newQuestion.options.some(o => !o)) return;
     try {
-      const { id } = await createQuestion({ ...newQuestion, quizId: selectedQuiz.id });
-      setQuestions([...questions, { ...newQuestion, id, quizId: selectedQuiz.id }]);
+      if (editingQuestionId) {
+        await fetch(`/api/questions/${editingQuestionId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...newQuestion, quizId: selectedQuiz.id })
+        });
+        setQuestions(questions.map(q => q.id === editingQuestionId ? { ...newQuestion, id: editingQuestionId, quizId: selectedQuiz.id } : q));
+        setEditingQuestionId(null);
+      } else {
+        const { id } = await createQuestion({ ...newQuestion, quizId: selectedQuiz.id });
+        setQuestions([...questions, { ...newQuestion, id, quizId: selectedQuiz.id }]);
+      }
       setNewQuestion({ text: '', options: ['', '', '', ''], correctOption: 0, timeLimit: 30 });
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleEditQuestion = (q: Question) => {
+    setNewQuestion({
+      text: q.text,
+      options: [...q.options],
+      correctOption: q.correctOption,
+      timeLimit: q.timeLimit
+    });
+    setEditingQuestionId(q.id);
   };
 
   if (loading) return <div className="text-center py-20 text-slate-500">Carregando quizzes...</div>;
@@ -155,10 +177,11 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                {/* New Question Form */}
+                {/* New/Edit Question Form */}
                 <div className="bg-slate-900/50 p-6 rounded-3xl border border-white/10 space-y-4 h-fit">
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Plus className="text-primary" /> Nova Pergunta
+                    {editingQuestionId ? <Save className="text-primary" /> : <Plus className="text-primary" />} 
+                    {editingQuestionId ? 'Editar Pergunta' : 'Nova Pergunta'}
                   </h3>
                   <input 
                     type="text" 
@@ -200,12 +223,25 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
                         className="w-full p-3 bg-slate-800 border border-white/10 rounded-lg text-white outline-none focus:border-primary"
                       />
                     </div>
-                    <button 
-                      onClick={handleAddQuestion}
-                      className="h-12 px-6 bg-primary text-white font-bold rounded-xl hover:opacity-90 transition-all flex items-center gap-2 mt-5"
-                    >
-                      <Save size={18} /> Salvar
-                    </button>
+                    <div className="flex gap-2 mt-5">
+                      {editingQuestionId && (
+                        <button 
+                          onClick={() => {
+                            setEditingQuestionId(null);
+                            setNewQuestion({ text: '', options: ['', '', '', ''], correctOption: 0, timeLimit: 30 });
+                          }}
+                          className="h-12 px-4 bg-slate-800 text-slate-400 font-bold rounded-xl hover:text-white transition-all"
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                      <button 
+                        onClick={handleAddOrUpdateQuestion}
+                        className="h-12 px-6 bg-primary text-white font-bold rounded-xl hover:opacity-90 transition-all flex items-center gap-2"
+                      >
+                        <Save size={18} /> {editingQuestionId ? 'Atualizar' : 'Salvar'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -214,20 +250,29 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
                   <h3 className="text-lg font-bold text-white">Perguntas do Quiz</h3>
                   <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                     {questions.map((q, idx) => (
-                      <div key={q.id} className="p-4 bg-slate-800 rounded-xl border border-white/5 flex items-center justify-between group">
+                      <div key={q.id} className={`p-4 bg-slate-800 rounded-xl border transition-all flex items-center justify-between group ${editingQuestionId === q.id ? 'border-primary' : 'border-white/5'}`}>
                         <div className="flex-1">
                           <p className="font-bold text-white mb-1">{idx + 1}. {q.text}</p>
                           <p className="text-xs text-slate-500">{q.options.length} opções • {q.timeLimit}s</p>
                         </div>
-                        <button 
-                          onClick={async () => {
-                            await fetch(`/api/questions/${q.id}`, { method: 'DELETE' });
-                            setQuestions(questions.filter(item => item.id !== q.id));
-                          }}
-                          className="p-2 text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => handleEditQuestion(q)}
+                            className="p-2 text-slate-500 hover:text-primary transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <RefreshCw size={16} />
+                          </button>
+                          <button 
+                            onClick={async () => {
+                              if (!confirm('Excluir esta pergunta?')) return;
+                              await fetch(`/api/questions/${q.id}`, { method: 'DELETE' });
+                              setQuestions(questions.filter(item => item.id !== q.id));
+                            }}
+                            className="p-2 text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {questions.length === 0 && (

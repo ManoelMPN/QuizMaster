@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Play, RotateCcw, Save, List, LayoutDashboard, User as UserIcon, Trophy, Settings, QrCode } from 'lucide-react';
+import { Plus, Trash2, Play, RotateCcw, Save, List, LayoutDashboard, User as UserIcon, Trophy, Settings, QrCode, RefreshCw } from 'lucide-react';
 import { Question, Participant, GameState, User, Quiz } from '../types';
 import QuizManager from './QuizManager';
 import PresenterProfile from './PresenterProfile';
@@ -14,6 +14,7 @@ interface AdminDashboardProps {
   onResetGame: () => void;
   onSelectQuiz: (quizId: string) => void;
   onUpdateUser: (user: User) => void;
+  onRegenerateCode: () => void;
 }
 
 export default function AdminDashboard({ 
@@ -24,7 +25,8 @@ export default function AdminDashboard({
   onShowRanking, 
   onResetGame,
   onSelectQuiz,
-  onUpdateUser
+  onUpdateUser,
+  onRegenerateCode
 }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'quizzes' | 'live' | 'profile'>('quizzes');
   const [activeQuizQuestions, setActiveQuizQuestions] = useState<Question[]>([]);
@@ -58,7 +60,7 @@ export default function AdminDashboard({
           <div className="flex min-w-max">
             <button 
               onClick={() => {
-                window.open('/join?present=true', '_blank');
+                window.open(`/join?present=true&code=${gameState.roomCode}`, '_blank');
               }}
               className="flex items-center gap-2 px-4 md:px-6 py-2.5 rounded-xl font-bold transition-all text-slate-400 hover:text-white whitespace-nowrap"
               title="Abrir tela de entrada com QR Code"
@@ -169,9 +171,21 @@ export default function AdminDashboard({
                   </div>
 
                   <div className="space-y-6">
-                    <div className="bg-slate-900/50 p-6 rounded-3xl border border-white/10 text-center">
-                      <p className="text-slate-500 text-xs uppercase font-bold tracking-widest mb-2">Participantes Conectados</p>
-                      <p className="text-5xl font-black text-white">{participants.length}</p>
+                    <div className="bg-slate-900/50 p-6 rounded-3xl border border-white/10 text-center space-y-4">
+                      <div>
+                        <p className="text-slate-500 text-xs uppercase font-bold tracking-widest mb-2">Código da Sala</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <p className="text-3xl font-black text-primary font-mono tracking-widest">{gameState.roomCode}</p>
+                          <button onClick={onRegenerateCode} className="text-slate-500 hover:text-white transition-colors">
+                            <RefreshCw size={18} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="h-px bg-white/5 w-full" />
+                      <div>
+                        <p className="text-slate-500 text-xs uppercase font-bold tracking-widest mb-2">Participantes</p>
+                        <p className="text-5xl font-black text-white">{participants.length}</p>
+                      </div>
                       <div className="mt-4 flex flex-wrap justify-center gap-2">
                         {participants.slice(0, 12).map(p => (
                           <div key={p.id} className="size-8 bg-slate-800 rounded-lg flex items-center justify-center text-lg border border-white/5" title={p.name}>
@@ -194,8 +208,10 @@ export default function AdminDashboard({
                           <span className="font-bold text-primary uppercase">{gameState.status}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-slate-500">Quiz ID</span>
-                          <span className="font-mono text-slate-300">{gameState.activeQuizId}</span>
+                          <span className="text-slate-500">Quiz Ativo</span>
+                          <span className="font-bold text-slate-300 truncate max-w-[120px]">
+                            {gameState.activeQuizId ? 'Selecionado' : 'Nenhum'}
+                          </span>
                         </div>
                       </div>
                     </div>

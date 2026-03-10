@@ -1,92 +1,144 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { QrCode, Users, Timer, Link2, Copy } from 'lucide-react';
+import { QrCode, Users, Timer, Link2, Copy, RefreshCw, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import QRCodeModal from './QRCodeModal';
-import { Participant } from '../types';
+import { Participant, GameState } from '../types';
 
 interface JoinScreenProps {
   participants: Participant[];
+  gameState: GameState;
   onAdminLogin: () => void;
+  onRegenerateCode: () => void;
 }
 
-export default function JoinScreen({ participants, onAdminLogin }: JoinScreenProps) {
-  const code = "482915";
+export default function JoinScreen({ participants, gameState, onAdminLogin, onRegenerateCode }: JoinScreenProps) {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const joinUrl = window.location.origin + "/join";
+  const roomCode = gameState.roomCode || "------";
+  
+  // Use current origin or APP_URL if we want to be explicit
+  const joinUrl = `${window.location.origin}/join?code=${roomCode}`;
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative">
+    <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden">
+      {/* Background elements */}
+      <div className="absolute top-0 left-0 w-full h-full -z-10 opacity-20">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/30 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/30 blur-[120px] rounded-full" />
+      </div>
+
       <button 
         onClick={onAdminLogin}
         className="absolute top-6 right-6 p-2 text-slate-600 hover:text-primary transition-colors text-sm font-bold uppercase tracking-widest"
       >
         Acesso Admin
       </button>
+
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[640px] text-center space-y-8"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-4xl text-center space-y-12"
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary font-semibold text-sm">
             <div className="size-2 rounded-full bg-primary animate-pulse" />
             Apresentação Ao Vivo
           </div>
-          <h1 className="text-white text-5xl md:text-7xl font-extrabold tracking-tight leading-none">
-            Entre no <span className="text-primary">Quiz</span>
+          <h1 className="text-white text-6xl md:text-8xl font-black tracking-tighter leading-none">
+            VAMOS <span className="text-primary">COMEÇAR?</span>
           </h1>
-          <p className="text-slate-400 text-lg md:text-xl font-medium max-w-md mx-auto">
-            Escaneie o QR Code abaixo para participar
+          <p className="text-slate-400 text-xl md:text-2xl font-medium max-w-2xl mx-auto">
+            Escaneie o QR Code ou acesse o link para participar da sessão.
           </p>
         </div>
 
-        <div className="bg-slate-900/50 p-8 rounded-3xl border border-white/10 shadow-2xl shadow-primary/5">
-          <div className="flex flex-col items-center gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          {/* QR Code Card */}
+          <motion.div 
+            whileHover={{ y: -5 }}
+            className="bg-slate-900/80 backdrop-blur-xl p-10 rounded-[2.5rem] border border-white/10 shadow-2xl shadow-primary/5 space-y-6"
+          >
             <div 
               onClick={() => setIsQRModalOpen(true)}
-              className="bg-white p-4 rounded-2xl cursor-pointer hover:scale-105 transition-transform shadow-2xl shadow-primary/10 w-full max-w-[240px] aspect-square flex items-center justify-center"
+              className="bg-white p-6 rounded-3xl cursor-pointer hover:scale-[1.02] transition-transform shadow-2xl shadow-primary/20 mx-auto w-full max-w-[280px] aspect-square flex items-center justify-center"
             >
               <QRCodeSVG 
                 value={joinUrl} 
-                size={200} 
+                size={240} 
                 level="H"
                 includeMargin={false}
-                fgColor="#151022"
+                fgColor="#0f172a"
                 className="w-full h-full"
               />
             </div>
-            <button 
-              onClick={() => setIsQRModalOpen(true)}
-              className="flex items-center justify-center gap-2 px-8 h-14 rounded-xl bg-primary text-white font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
-            >
-              <QrCode size={20} />
-              <span>Ver QR Code Ampliado</span>
-            </button>
-          </div>
-        </div>
+            <div className="space-y-2">
+              <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Escaneie para entrar</p>
+              <button 
+                onClick={() => setIsQRModalOpen(true)}
+                className="text-primary font-black hover:underline"
+              >
+                Ver em tela cheia
+              </button>
+            </div>
+          </motion.div>
 
-        <div className="pt-6">
-          <div className="flex items-center justify-center -space-x-3 mb-4">
-            {participants.slice(0, 5).map((p) => (
-              <div key={p.id} className="size-12 rounded-full border-2 border-[#151022] bg-slate-800 flex items-center justify-center text-2xl shadow-lg">
-                {p.avatar}
+          {/* Room Code Card */}
+          <div className="space-y-6">
+            <div className="bg-slate-900/80 backdrop-blur-xl p-10 rounded-[2.5rem] border border-white/10 shadow-2xl shadow-primary/5 text-center space-y-6">
+              <div className="space-y-2">
+                <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Código da Sala</p>
+                <div className="flex items-center justify-center gap-4">
+                  <div className="text-6xl md:text-7xl font-black text-white tracking-[0.2em] font-mono">
+                    {roomCode}
+                  </div>
+                  <button 
+                    onClick={onRegenerateCode}
+                    className="p-2 text-slate-600 hover:text-primary transition-colors"
+                    title="Gerar novo código"
+                  >
+                    <RefreshCw size={24} />
+                  </button>
+                </div>
               </div>
-            ))}
-            {participants.length > 5 && (
-              <div className="size-12 rounded-full border-2 border-[#151022] bg-primary flex items-center justify-center text-xs font-bold text-white shadow-lg">
-                +{participants.length - 5}
+              
+              <div className="pt-4 space-y-4">
+                <p className="text-slate-400 font-medium">Ou acesse manualmente:</p>
+                <div className="flex items-center gap-2 p-4 bg-slate-800/50 rounded-2xl border border-white/5 group">
+                  <Link2 className="text-primary shrink-0" size={20} />
+                  <span className="text-slate-300 font-mono truncate text-sm flex-1">{joinUrl}</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(joinUrl);
+                      alert('Link copiado!');
+                    }}
+                    className="p-2 text-slate-500 hover:text-primary transition-colors"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
               </div>
-            )}
-            {participants.length === 0 && (
-              <div className="size-12 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center text-slate-700">
-                <Users size={20} />
+            </div>
+
+            {/* Participants Counter */}
+            <div className="bg-primary/10 p-8 rounded-[2rem] border border-primary/20 flex items-center justify-between">
+              <div className="flex flex-col items-start">
+                <span className="text-4xl font-black text-white">{participants.length}</span>
+                <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Participantes Reais</span>
               </div>
-            )}
+              <div className="flex -space-x-3">
+                {participants.slice(0, 6).map((p) => (
+                  <div key={p.id} className="size-12 rounded-full border-4 border-slate-900 bg-slate-800 flex items-center justify-center text-2xl shadow-xl">
+                    {p.avatar}
+                  </div>
+                ))}
+                {participants.length > 6 && (
+                  <div className="size-12 rounded-full border-4 border-slate-900 bg-primary flex items-center justify-center text-xs font-bold text-white shadow-xl">
+                    +{participants.length - 6}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <p className="text-sm font-semibold text-slate-500 uppercase tracking-widest">
-            {participants.length === 0 ? 'Aguardando primeiro participante...' : `${participants.length} participantes conectados`}
-          </p>
         </div>
       </motion.div>
 
@@ -95,48 +147,6 @@ export default function JoinScreen({ participants, onAdminLogin }: JoinScreenPro
         onClose={() => setIsQRModalOpen(false)} 
         url={joinUrl} 
       />
-
-      <footer className="w-full max-w-7xl mx-auto mt-auto px-6 py-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 text-sm font-medium text-slate-500">
-          <div className="flex items-center gap-2">
-            <Users size={18} className="text-primary" />
-            <span className="text-white">{participants.length}</span> Entraram
-          </div>
-          <div className="flex items-center gap-2">
-            <Timer size={18} className="text-primary" />
-            Aguardando Início
-          </div>
-        </div>
-        
-        <div className="flex flex-col md:flex-row items-center gap-6">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-500">Compartilhar:</span>
-            <div className="flex gap-2">
-              <button className="p-2 rounded-lg bg-slate-800 text-slate-500 hover:text-primary transition-colors">
-                <Link2 size={20} />
-              </button>
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(joinUrl);
-                  alert('Link copiado!');
-                }}
-                className="p-2 rounded-lg bg-slate-800 text-slate-500 hover:text-primary transition-colors"
-              >
-                <Copy size={20} />
-              </button>
-            </div>
-          </div>
-          
-          <div className="h-4 w-px bg-white/10 hidden md:block" />
-          
-          <button 
-            onClick={onAdminLogin}
-            className="text-xs font-bold text-slate-600 hover:text-primary transition-colors uppercase tracking-widest"
-          >
-            Painel do Mestre
-          </button>
-        </div>
-      </footer>
     </div>
   );
 }

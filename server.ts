@@ -117,7 +117,8 @@ async function startServer() {
     activeQuizId: null as string | null,
     status: 'waiting' as 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished',
     questionStartTime: 0,
-    countdown: 0
+    countdown: 0,
+    roomCode: Math.random().toString(36).substr(2, 6).toUpperCase()
   };
 
   // Auth Routes
@@ -255,6 +256,13 @@ async function startServer() {
     res.json({ id });
   });
 
+  app.put("/api/questions/:id", (req, res) => {
+    const { text, options, correctOption, timeLimit } = req.body;
+    db.prepare("UPDATE questions SET text = ?, options = ?, correct_option = ?, time_limit = ? WHERE id = ?")
+      .run(text, JSON.stringify(options), correctOption, timeLimit, req.params.id);
+    res.json({ success: true });
+  });
+
   app.delete("/api/questions/:id", (req, res) => {
     db.prepare("DELETE FROM questions WHERE id = ?").run(req.params.id);
     res.json({ success: true });
@@ -262,19 +270,28 @@ async function startServer() {
 
   // Participant Join (No login)
   app.post("/api/join", (req, res) => {
+    const { name: requestedName, roomCode } = req.body;
+
+    if (roomCode && roomCode !== gameState.roomCode) {
+      return res.status(400).json({ error: "Código da sala inválido ou expirado." });
+    }
+
     const count: any = db.prepare("SELECT COUNT(*) as total FROM participants").get();
     if (count.total >= 500) {
       return res.status(403).json({ error: "Limite de 500 participantes atingido. Aguarde a próxima rodada!" });
     }
 
-    const usados = new Set<string>(db.prepare("SELECT name FROM participants").all().map((p: any) => p.name as string));
-    const persona = gerarPersonaUnica(usados);
     const id = Math.random().toString(36).substr(2, 9);
-    const avatar = persona.split(' ')[0];
-    const name = persona.split(' ').slice(1).join(' ');
+    const avatar = gerarPersonaUnica(new Set()).split(' ')[0]; // Just get a random avatar
+    const name = requestedName || `Player ${Math.floor(Math.random() * 1000)}`;
     
     db.prepare("INSERT INTO participants (id, name, avatar, points, joined_at) VALUES (?, ?, ?, 0, ?)")
       .run(id, name, avatar, Date.now());
+    
+    // Broadcast join
+    const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
+    broadcast({ type: "SYNC", participants, gameState });
+
     res.json({ id, name, avatar });
   });
 
@@ -294,6 +311,11 @@ async function startServer() {
         
         if (payload.type === "SELECT_QUIZ") {
         gameState.activeQuizId = payload.quizId;
+        broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all(), gameState });
+      }
+
+      if (payload.type === "REGENERATE_ROOM_CODE") {
+        gameState.roomCode = Math.random().toString(36).substr(2, 6).toUpperCase();
         broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all(), gameState });
       }
 

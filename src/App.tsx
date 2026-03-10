@@ -5,17 +5,18 @@ import LeaderboardScreen from './components/LeaderboardScreen';
 import Auth from './components/Auth';
 import AdminDashboard from './components/AdminDashboard';
 import ParticipantView from './components/ParticipantView';
+import HomeScreen from './components/HomeScreen';
 import { Screen, User, Participant, GameState, Question } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { getMe, logout } from './services/api';
-import { LogOut, LayoutDashboard, Users as UsersIcon, Trophy } from 'lucide-react';
+import { LogOut, LayoutDashboard, Users as UsersIcon, Trophy, Home } from 'lucide-react';
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('join');
+  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [gameState, setGameState] = useState<GameState>({ currentQuestionId: null, status: 'waiting' });
+  const [gameState, setGameState] = useState<GameState>({ currentQuestionId: null, status: 'waiting', roomCode: '' });
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [participantId, setParticipantId] = useState<string | null>(localStorage.getItem('participantId'));
   const [participantName, setParticipantName] = useState<string | null>(localStorage.getItem('participantName'));
@@ -24,53 +25,58 @@ export default function App() {
   
   const socketRef = useRef<WebSocket | null>(null);
 
+  const handleJoin = async (name: string) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCodeParam = urlParams.get('code');
+
+    setIsJoining(true);
+    try {
+      const res = await fetch('/api/join', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, roomCode: roomCodeParam })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setParticipantId(data.id);
+        setParticipantName(data.name);
+        localStorage.setItem('participantId', data.id);
+        localStorage.setItem('participantName', data.name);
+        localStorage.setItem('participantAvatar', data.avatar);
+        setCurrentScreen('participant');
+      } else {
+        alert(data.error || "Não foi possível entrar no quiz.");
+      }
+    } catch (err) {
+      console.error("Join error:", err);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
   useEffect(() => {
     // Check for admin auth
     getMe().then(u => {
       if (u) setUser(u);
       setLoading(false);
     });
+  }, []);
 
-    // Handle auto-join for participants
-    const handleJoin = async () => {
-      if (isPresentMode) {
-        setCurrentScreen('join');
-        return;
-      }
+  useEffect(() => {
+    if (isPresentMode) {
+      setCurrentScreen('join');
+      return;
+    }
 
-      if (window.location.pathname === '/join' && !isJoining) {
-        setIsJoining(true);
-        try {
-          const res = await fetch('/api/join', { method: 'POST' });
-          const data = await res.json();
-          if (res.ok) {
-            setParticipantId(data.id);
-            setParticipantName(data.name);
-            localStorage.setItem('participantId', data.id);
-            localStorage.setItem('participantName', data.name);
-            localStorage.setItem('participantAvatar', data.avatar);
-            setCurrentScreen('participant');
-          } else {
-            alert(data.error || "Não foi possível entrar no quiz.");
-          }
-        } catch (err) {
-          console.error("Join error:", err);
-        } finally {
-          setIsJoining(false);
-        }
-      } else if (participantId) {
-        // Ensure we have a name if we have an ID
-        if (!participantName) {
-          // If we have an ID but no name, we might need to fetch it or just let the user set it
-          // For now, let's just default to a placeholder if it's missing from localStorage
-          setParticipantName("Participante");
-        }
-        setCurrentScreen('participant');
-      }
-    };
+    if (window.location.pathname === '/join' && !participantId) {
+      setCurrentScreen('participant'); // ParticipantView will handle name entry
+    } else if (participantId) {
+      if (!participantName) setParticipantName("Participante");
+      setCurrentScreen('participant');
+    }
+  }, [participantId, isPresentMode]);
 
-    handleJoin();
-
+  useEffect(() => {
     // WebSocket Connection
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(`${protocol}//${window.location.host}`);
@@ -82,8 +88,8 @@ export default function App() {
 
     socket.onmessage = (event) => {
       const payload = JSON.parse(event.data);
-      if (payload.type === 'SYNC' || payload.type === 'RANKING_UPDATE') {
-        setParticipants(payload.participants);
+      if (payload.type === 'SYNC' || payload.type === 'RANKING_UPDATE' || payload.type === 'COUNTDOWN_STARTED') {
+        setParticipants(payload.participants || []);
         setGameState(payload.gameState);
       }
       if (payload.type === 'QUESTION_STARTED') {
@@ -103,11 +109,15 @@ export default function App() {
   const handleLogout = async () => {
     await logout();
     setUser(null);
-    setCurrentScreen('join');
+    setCurrentScreen('home');
   };
 
   const selectQuiz = (quizId: string) => {
     socketRef.current?.send(JSON.stringify({ type: 'SELECT_QUIZ', quizId }));
+  };
+
+  const regenerateRoomCode = () => {
+    socketRef.current?.send(JSON.stringify({ type: 'REGENERATE_ROOM_CODE' }));
   };
 
   const startQuestion = (questionId: string) => {
@@ -170,31 +180,43 @@ export default function App() {
           {serverStatus === 'online' ? 'Servidor Online' : serverStatus === 'offline' ? 'Servidor Offline' : 'Verificando...'}
         </span>
       </div>
-      {user && (
-        <div className="fixed top-20 right-6 z-[100] flex items-center gap-4">
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setCurrentScreen('join')}
-              className={`p-2 rounded-lg transition-all ${currentScreen === 'join' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              title="Tela de Entrada"
-            >
-              <UsersIcon size={20} />
-            </button>
-            <button 
-              onClick={() => setCurrentScreen('admin')}
-              className={`p-2 rounded-lg transition-all ${currentScreen === 'admin' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              title="Painel Admin"
-            >
-              <LayoutDashboard size={20} />
-            </button>
-            <button 
-              onClick={() => setCurrentScreen('leaderboard')}
-              className={`p-2 rounded-lg transition-all ${currentScreen === 'leaderboard' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              title="Placar"
-            >
-              <Trophy size={20} />
-            </button>
-          </div>
+      
+      <div className="fixed top-20 right-6 z-[100] flex items-center gap-4">
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setCurrentScreen('home')}
+            className={`p-2 rounded-lg transition-all ${currentScreen === 'home' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            title="Início"
+          >
+            <Home size={20} />
+          </button>
+          <button 
+            onClick={() => setCurrentScreen('join')}
+            className={`p-2 rounded-lg transition-all ${currentScreen === 'join' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            title="Tela de Entrada"
+          >
+            <UsersIcon size={20} />
+          </button>
+          {user && (
+            <>
+              <button 
+                onClick={() => setCurrentScreen('admin')}
+                className={`p-2 rounded-lg transition-all ${currentScreen === 'admin' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                title="Painel Admin"
+              >
+                <LayoutDashboard size={20} />
+              </button>
+              <button 
+                onClick={() => setCurrentScreen('leaderboard')}
+                className={`p-2 rounded-lg transition-all ${currentScreen === 'leaderboard' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                title="Placar"
+              >
+                <Trophy size={20} />
+              </button>
+            </>
+          )}
+        </div>
+        {user && (
           <button 
             onClick={handleLogout}
             className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
@@ -202,8 +224,8 @@ export default function App() {
           >
             <LogOut size={20} />
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -215,11 +237,12 @@ export default function App() {
           className="flex-1 flex flex-col"
         >
           {isPresentMode ? (
-            <JoinScreen participants={participants} onAdminLogin={() => setIsPresentMode(false)} />
+            <JoinScreen participants={participants} gameState={gameState} onAdminLogin={() => setIsPresentMode(false)} onRegenerateCode={regenerateRoomCode} />
           ) : (
             <>
+              {currentScreen === 'home' && <HomeScreen onSelect={setCurrentScreen} isAdmin={!!user} />}
               {currentScreen === 'auth' && <Auth onSuccess={handleAuthSuccess} />}
-              {currentScreen === 'join' && <JoinScreen participants={participants} onAdminLogin={() => setCurrentScreen('auth')} />}
+              {currentScreen === 'join' && <JoinScreen participants={participants} gameState={gameState} onAdminLogin={() => setCurrentScreen('auth')} onRegenerateCode={regenerateRoomCode} />}
               {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} currentParticipantId={participantId} />}
               {currentScreen === 'admin' && user && (
                 <AdminDashboard 
@@ -231,16 +254,18 @@ export default function App() {
                   onResetGame={resetGame}
                   onSelectQuiz={selectQuiz}
                   onUpdateUser={setUser}
+                  onRegenerateCode={regenerateRoomCode}
                 />
               )}
-              {currentScreen === 'participant' && participantId && (
+              {currentScreen === 'participant' && (
                 <ParticipantView 
-                  participantId={participantId}
-                  participantName={participantName || "Participante"}
+                  participantId={participantId || ''}
+                  participantName={participantName || ''}
                   gameState={gameState}
                   currentQuestion={currentQuestion}
                   onSubmitAnswer={submitAnswer}
                   onUpdateName={updateName}
+                  onJoin={handleJoin}
                   participants={participants}
                 />
               )}

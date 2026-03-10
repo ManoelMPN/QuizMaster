@@ -11,18 +11,19 @@ interface ParticipantViewProps {
   currentQuestion: Question | null;
   onSubmitAnswer: (optionIndex: number) => void;
   onUpdateName: (newName: string) => void;
+  onJoin: (name: string) => void;
   participants: Participant[];
 }
 
-export default function ParticipantView({ participantId, participantName, gameState, currentQuestion, onSubmitAnswer, onUpdateName, participants }: ParticipantViewProps) {
+export default function ParticipantView({ participantId, participantName, gameState, currentQuestion, onSubmitAnswer, onUpdateName, onJoin, participants }: ParticipantViewProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(!participantId);
   const [tempName, setTempName] = useState(participantName);
 
   // Sync tempName when participantName changes from parent (e.g. after join)
   useEffect(() => {
-    if (!isEditing) {
+    if (!isEditing && participantName) {
       setTempName(participantName);
     }
   }, [participantName, isEditing]);
@@ -53,7 +54,11 @@ export default function ParticipantView({ participantId, participantName, gameSt
   };
 
   const handleSaveName = () => {
-    if (tempName.trim() && tempName !== participantName) {
+    if (!tempName.trim()) return;
+    
+    if (!participantId) {
+      onJoin(tempName.trim());
+    } else if (tempName !== participantName) {
       onUpdateName(tempName.trim());
     }
     setIsEditing(false);
@@ -62,7 +67,7 @@ export default function ParticipantView({ participantId, participantName, gameSt
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 max-w-2xl mx-auto w-full">
       <AnimatePresence mode="wait">
-        {gameState.status === 'waiting' && (
+        {(gameState.status === 'waiting' || !participantId) && (
           <motion.div 
             key="waiting"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -76,10 +81,12 @@ export default function ParticipantView({ participantId, participantName, gameSt
             
             {isEditing ? (
               <div className="space-y-4 max-w-xs mx-auto w-full">
+                <h2 className="text-xl font-bold text-white">Como quer ser chamado?</h2>
                 <input 
                   type="text" 
                   value={tempName}
                   onChange={(e) => setTempName(e.target.value)}
+                  placeholder="Seu nome ou apelido"
                   className="w-full p-4 bg-slate-800 border-2 border-primary rounded-xl text-white text-center font-bold outline-none"
                   autoFocus
                 />
@@ -87,7 +94,7 @@ export default function ParticipantView({ participantId, participantName, gameSt
                   onClick={handleSaveName}
                   className="w-full p-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform"
                 >
-                  Salvar Nome
+                  {participantId ? 'Salvar Nome' : 'Entrar no Quiz'}
                 </button>
               </div>
             ) : (
@@ -103,10 +110,12 @@ export default function ParticipantView({ participantId, participantName, gameSt
               </div>
             )}
 
-            <div className="pt-8 flex flex-col items-center gap-4">
-              <Loader2 className="animate-spin text-primary" size={32} />
-              <p className="text-slate-500 text-sm md:text-base font-medium animate-pulse px-4">Aguardando o mestre iniciar o quiz...</p>
-            </div>
+            {participantId && (
+              <div className="pt-8 flex flex-col items-center gap-4">
+                <Loader2 className="animate-spin text-primary" size={32} />
+                <p className="text-slate-500 text-sm md:text-base font-medium animate-pulse px-4">Aguardando o mestre iniciar o quiz...</p>
+              </div>
+            )}
           </motion.div>
         )}
 

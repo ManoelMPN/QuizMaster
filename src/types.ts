@@ -36,7 +36,8 @@ export interface GameState {
   status: 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished';
   questionStartTime?: number;
   countdown?: number;
+  roomCode?: string;
 }
 
-export type Screen = 'auth' | 'join' | 'leaderboard' | 'admin' | 'participant';
+export type Screen = 'home' | 'auth' | 'join' | 'leaderboard' | 'admin' | 'participant';
 export type AuthMode = 'login' | 'register';
