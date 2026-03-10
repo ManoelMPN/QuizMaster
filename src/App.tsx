@@ -114,14 +114,11 @@ export default function App() {
 
   const selectQuiz = (quizId: string) => {
     socketRef.current?.send(JSON.stringify({ type: 'SELECT_QUIZ', quizId }));
+    setIsPresentMode(true);
   };
 
   const regenerateRoomCode = () => {
     socketRef.current?.send(JSON.stringify({ type: 'REGENERATE_ROOM_CODE' }));
-  };
-
-  const startQuestion = (questionId: string) => {
-    socketRef.current?.send(JSON.stringify({ type: 'START_QUESTION', questionId }));
   };
 
   const startCountdown = (questionId: string) => {
@@ -137,6 +134,10 @@ export default function App() {
 
   const showRanking = () => {
     socketRef.current?.send(JSON.stringify({ type: 'SHOW_RANKING' }));
+  };
+
+  const showAnswer = () => {
+    socketRef.current?.send(JSON.stringify({ type: 'SHOW_ANSWER' }));
   };
 
   const resetGame = () => {
@@ -191,30 +192,12 @@ export default function App() {
             <Home size={20} />
           </button>
           <button 
-            onClick={() => setCurrentScreen('join')}
-            className={`p-2 rounded-lg transition-all ${currentScreen === 'join' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-            title="Tela de Entrada"
+            onClick={() => setCurrentScreen(user ? 'admin' : 'auth')}
+            className={`p-2 rounded-lg transition-all ${currentScreen === 'admin' || currentScreen === 'auth' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            title="Painel Admin"
           >
-            <UsersIcon size={20} />
+            <LayoutDashboard size={20} />
           </button>
-          {user && (
-            <>
-              <button 
-                onClick={() => setCurrentScreen('admin')}
-                className={`p-2 rounded-lg transition-all ${currentScreen === 'admin' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-                title="Painel Admin"
-              >
-                <LayoutDashboard size={20} />
-              </button>
-              <button 
-                onClick={() => setCurrentScreen('leaderboard')}
-                className={`p-2 rounded-lg transition-all ${currentScreen === 'leaderboard' ? 'bg-primary text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-                title="Placar"
-              >
-                <Trophy size={20} />
-              </button>
-            </>
-          )}
         </div>
         {user && (
           <button 
@@ -237,12 +220,12 @@ export default function App() {
           className="flex-1 flex flex-col"
         >
           {isPresentMode ? (
-            <JoinScreen participants={participants} gameState={gameState} onAdminLogin={() => setIsPresentMode(false)} onRegenerateCode={regenerateRoomCode} />
+            <JoinScreen participants={participants} gameState={gameState} currentQuestion={currentQuestion} onAdminLogin={() => setIsPresentMode(false)} onRegenerateCode={regenerateRoomCode} />
           ) : (
             <>
               {currentScreen === 'home' && <HomeScreen onSelect={setCurrentScreen} isAdmin={!!user} />}
               {currentScreen === 'auth' && <Auth onSuccess={handleAuthSuccess} />}
-              {currentScreen === 'join' && <JoinScreen participants={participants} gameState={gameState} onAdminLogin={() => setCurrentScreen('auth')} onRegenerateCode={regenerateRoomCode} />}
+              {currentScreen === 'join' && <JoinScreen participants={participants} gameState={gameState} currentQuestion={currentQuestion} onAdminLogin={() => setCurrentScreen('auth')} onRegenerateCode={regenerateRoomCode} />}
               {currentScreen === 'leaderboard' && <LeaderboardScreen participants={participants} currentParticipantId={participantId} />}
               {currentScreen === 'admin' && user && (
                 <AdminDashboard 
@@ -251,6 +234,7 @@ export default function App() {
                   gameState={gameState} 
                   onStartQuestion={startCountdown}
                   onShowRanking={showRanking}
+                  onShowAnswer={showAnswer}
                   onResetGame={resetGame}
                   onSelectQuiz={selectQuiz}
                   onUpdateUser={setUser}

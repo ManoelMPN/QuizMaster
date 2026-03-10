@@ -14,6 +14,7 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [newQuizTitle, setNewQuizTitle] = useState('');
+  const [newQuizBackground, setNewQuizBackground] = useState('');
   const [showNewQuizModal, setShowNewQuizModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +22,8 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
     text: '',
     options: ['', '', '', ''],
     correctOption: 0,
-    timeLimit: 30
+    timeLimit: 30,
+    backgroundUrl: ''
   });
 
   useEffect(() => {
@@ -42,9 +44,10 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
   const handleCreateQuiz = async () => {
     if (!newQuizTitle) return;
     try {
-      const quiz = await createQuiz(newQuizTitle);
+      const quiz = await createQuiz(newQuizTitle, newQuizBackground);
       setQuizzes([quiz, ...quizzes]);
       setNewQuizTitle('');
+      setNewQuizBackground('');
       setShowNewQuizModal(false);
     } catch (err) {
       console.error(err);
@@ -101,7 +104,8 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
       text: q.text,
       options: [...q.options],
       correctOption: q.correctOption,
-      timeLimit: q.timeLimit
+      timeLimit: q.timeLimit,
+      backgroundUrl: q.backgroundUrl || ''
     });
     setEditingQuestionId(q.id);
   };
@@ -134,6 +138,16 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
                 <p className="text-xs text-slate-500">{new Date(quiz.createdAt).toLocaleDateString()}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectQuiz(quiz.id);
+                  }}
+                  className={`p-2 rounded-lg transition-all ${activeQuizId === quiz.id ? 'text-green-500' : 'text-slate-500 hover:text-primary'}`}
+                  title="Apresentar agora"
+                >
+                  <Play size={16} fill={activeQuizId === quiz.id ? "currentColor" : "none"} />
+                </button>
                 <button 
                   onClick={(e) => handleDeleteQuiz(quiz.id, e)}
                   className="p-2 text-slate-500 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
@@ -189,6 +203,13 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
                     value={newQuestion.text}
                     onChange={e => setNewQuestion({...newQuestion, text: e.target.value})}
                     className="w-full p-4 bg-slate-800 border border-white/10 rounded-xl text-white outline-none focus:border-primary"
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="URL da imagem de fundo (opcional)"
+                    value={newQuestion.backgroundUrl}
+                    onChange={e => setNewQuestion({...newQuestion, backgroundUrl: e.target.value})}
+                    className="w-full p-3 bg-slate-800 border border-white/10 rounded-xl text-white text-sm outline-none focus:border-primary"
                   />
                   <div className="grid grid-cols-1 gap-3">
                     {newQuestion.options.map((opt, idx) => (
@@ -317,6 +338,16 @@ export default function QuizManager({ onSelectQuiz, activeQuizId }: QuizManagerP
                     value={newQuizTitle}
                     onChange={e => setNewQuizTitle(e.target.value)}
                     placeholder="Ex: Conhecimentos Gerais"
+                    className="w-full p-4 bg-slate-800 border border-white/10 rounded-xl text-white outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-slate-400 mb-2 block">URL da Imagem de Fundo (opcional)</label>
+                  <input 
+                    type="text" 
+                    value={newQuizBackground}
+                    onChange={e => setNewQuizBackground(e.target.value)}
+                    placeholder="https://exemplo.com/imagem.jpg"
                     className="w-full p-4 bg-slate-800 border border-white/10 rounded-xl text-white outline-none focus:border-primary"
                   />
                 </div>

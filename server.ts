@@ -45,6 +45,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     title TEXT,
     user_id TEXT,
+    background_url TEXT,
     created_at INTEGER,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
@@ -55,6 +56,7 @@ db.exec(`
     options TEXT, -- JSON array
     correct_option INTEGER,
     time_limit INTEGER,
+    background_url TEXT,
     FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
   );
   CREATE TABLE IF NOT EXISTS participants (
@@ -62,6 +64,7 @@ db.exec(`
     name TEXT,
     avatar TEXT,
     points INTEGER DEFAULT 0,
+    last_points INTEGER DEFAULT 0,
     status TEXT,
     joined_at INTEGER
   );
@@ -80,7 +83,16 @@ try {
   db.prepare("ALTER TABLE questions ADD COLUMN quiz_id TEXT").run();
 } catch (e) {}
 try {
+  db.prepare("ALTER TABLE quizzes ADD COLUMN background_url TEXT").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE questions ADD COLUMN background_url TEXT").run();
+} catch (e) {}
+try {
   db.prepare("ALTER TABLE participants ADD COLUMN joined_at INTEGER").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE participants ADD COLUMN last_points INTEGER DEFAULT 0").run();
 } catch (e) {}
 
 async function startServer() {
@@ -115,10 +127,12 @@ async function startServer() {
   let gameState = {
     currentQuestionId: null as string | null,
     activeQuizId: null as string | null,
-    status: 'waiting' as 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished',
+    status: 'waiting' as 'waiting' | 'countdown' | 'question' | 'answer' | 'ranking' | 'finished',
     questionStartTime: 0,
     countdown: 0,
-    roomCode: Math.random().toString(36).substr(2, 6).toUpperCase()
+    roomCode: Math.random().toString(36).substr(2, 6).toUpperCase(),
+    totalQuestions: 0,
+    currentQuestionIndex: 0
   };
 
   // Auth Routes
@@ -209,7 +223,10 @@ async function startServer() {
     if (!token) return res.status(401).json({ error: "Não logado" });
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
-      const quizzes = db.prepare("SELECT * FROM quizzes WHERE user_id = ? ORDER BY created_at DESC").all(decoded.id);
+      const quizzes = db.prepare("SELECT * FROM quizzes WHERE user_id = ? ORDER BY created_at DESC").all(decoded.id).map((q: any) => ({
+        ...q,
+        backgroundUrl: q.background_url
+      }));
       res.json(quizzes);
     } catch (err) {
       res.status(401).json({ error: "Erro ao buscar quizzes" });
@@ -221,11 +238,11 @@ async function startServer() {
     if (!token) return res.status(401).json({ error: "Não logado" });
     try {
       const decoded: any = jwt.verify(token, JWT_SECRET);
-      const { title } = req.body;
+      const { title, backgroundUrl } = req.body;
       const id = Math.random().toString(36).substr(2, 9);
-      db.prepare("INSERT INTO quizzes (id, title, user_id, created_at) VALUES (?, ?, ?, ?)")
-        .run(id, title, decoded.id, Date.now());
-      res.json({ id, title });
+      db.prepare("INSERT INTO quizzes (id, title, user_id, background_url, created_at) VALUES (?, ?, ?, ?, ?)")
+        .run(id, title, decoded.id, backgroundUrl, Date.now());
+      res.json({ id, title, backgroundUrl });
     } catch (err) {
       res.status(401).json({ error: "Erro ao criar quiz" });
     }
@@ -243,23 +260,26 @@ async function startServer() {
   app.get("/api/questions/:quizId", (req, res) => {
     const questions = db.prepare("SELECT * FROM questions WHERE quiz_id = ?").all(req.params.quizId).map((q: any) => ({
       ...q,
-      options: JSON.parse(q.options)
+      options: JSON.parse(q.options),
+      correctOption: q.correct_option,
+      timeLimit: q.time_limit,
+      backgroundUrl: q.background_url
     }));
     res.json(questions);
   });
 
   app.post("/api/questions", (req, res) => {
-    const { quizId, text, options, correctOption, timeLimit } = req.body;
+    const { quizId, text, options, correctOption, timeLimit, backgroundUrl } = req.body;
     const id = Math.random().toString(36).substr(2, 9);
-    db.prepare("INSERT INTO questions (id, quiz_id, text, options, correct_option, time_limit) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(id, quizId, text, JSON.stringify(options), correctOption, timeLimit);
+    db.prepare("INSERT INTO questions (id, quiz_id, text, options, correct_option, time_limit, background_url) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(id, quizId, text, JSON.stringify(options), correctOption, timeLimit, backgroundUrl);
     res.json({ id });
   });
 
   app.put("/api/questions/:id", (req, res) => {
-    const { text, options, correctOption, timeLimit } = req.body;
-    db.prepare("UPDATE questions SET text = ?, options = ?, correct_option = ?, time_limit = ? WHERE id = ?")
-      .run(text, JSON.stringify(options), correctOption, timeLimit, req.params.id);
+    const { text, options, correctOption, timeLimit, backgroundUrl } = req.body;
+    db.prepare("UPDATE questions SET text = ?, options = ?, correct_option = ?, time_limit = ?, background_url = ? WHERE id = ?")
+      .run(text, JSON.stringify(options), correctOption, timeLimit, backgroundUrl, req.params.id);
     res.json({ success: true });
   });
 
@@ -320,9 +340,13 @@ async function startServer() {
       }
 
       if (payload.type === "START_COUNTDOWN") {
+        const questions = db.prepare("SELECT id FROM questions WHERE quiz_id = ?").all(gameState.activeQuizId);
+        const currentIndex = questions.findIndex((q: any) => q.id === payload.questionId);
+
         gameState.status = 'countdown';
         gameState.countdown = 3;
         gameState.currentQuestionId = payload.questionId;
+        gameState.currentQuestionIndex = currentIndex + 1;
         broadcast({ type: "COUNTDOWN_STARTED", gameState });
         
         const timer = setInterval(() => {
@@ -333,7 +357,16 @@ async function startServer() {
             gameState.status = 'question';
             gameState.questionStartTime = Date.now();
             const question: any = db.prepare("SELECT * FROM questions WHERE id = ?").get(gameState.currentQuestionId);
-            broadcast({ type: "QUESTION_STARTED", question: { ...question, options: JSON.parse(question.options) }, gameState });
+            broadcast({ type: "QUESTION_STARTED", question: { ...question, options: JSON.parse(question.options), backgroundUrl: question.background_url }, gameState });
+
+            // Automatic transition to answer after time limit + 1s buffer
+            const timeLimit = question.time_limit || 30;
+            setTimeout(() => {
+              if (gameState.currentQuestionId === payload.questionId && gameState.status === 'question') {
+                gameState.status = 'answer';
+                broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all(), gameState });
+              }
+            }, (timeLimit + 1) * 1000);
           } else {
             broadcast({ type: "SYNC", participants: db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all(), gameState });
           }
@@ -359,16 +392,29 @@ async function startServer() {
         }
       }
 
-      if (payload.type === "START_QUESTION") {
+      if (payload.type === "SELECT_QUIZ") {
+        const { quizId } = payload;
+        const questions = db.prepare("SELECT id FROM questions WHERE quiz_id = ?").all(quizId);
+        
+        // Reset points for a new session
+        db.prepare("UPDATE participants SET points = 0, last_points = 0").run();
+        
         gameState = {
           ...gameState,
-          currentQuestionId: payload.questionId,
-          status: 'question',
-          questionStartTime: Date.now(),
-          countdown: 0
+          activeQuizId: quizId,
+          status: 'waiting',
+          roomCode: Math.random().toString(36).substr(2, 6).toUpperCase(),
+          totalQuestions: questions.length,
+          currentQuestionIndex: 0
         };
-        const question: any = db.prepare("SELECT * FROM questions WHERE id = ?").get(payload.questionId);
-        broadcast({ type: "QUESTION_STARTED", question: { ...question, options: JSON.parse(question.options) }, gameState });
+        const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
+        broadcast({ type: "SYNC", participants, gameState });
+      }
+
+      if (payload.type === "SHOW_ANSWER") {
+        gameState.status = 'answer';
+        const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
+        broadcast({ type: "SYNC", participants, gameState });
       }
 
       if (payload.type === "SUBMIT_ANSWER") {
@@ -383,9 +429,14 @@ async function startServer() {
           
           if (isCorrect) {
             // Scoring: 1000 base points + speed bonus (max 1000)
-            const speedBonus = Math.max(0, 1000 - Math.floor((responseTime / (question.time_limit * 1000)) * 1000));
-            const points = 1000 + speedBonus;
-            db.prepare("UPDATE participants SET points = points + ? WHERE id = ?").run(points, participantId);
+            const timeLimitMs = question.time_limit * 1000;
+            const speedFactor = Math.max(0, 1 - (responseTime / timeLimitMs));
+            const pointsEarned = 1000 + Math.floor(speedFactor * 1000);
+            
+            db.prepare("UPDATE participants SET points = points + ?, last_points = ? WHERE id = ?")
+              .run(pointsEarned, pointsEarned, participantId);
+          } else {
+            db.prepare("UPDATE participants SET last_points = 0 WHERE id = ?").run(participantId);
           }
         } catch (e) {
           // Already answered
@@ -393,16 +444,21 @@ async function startServer() {
       }
 
       if (payload.type === "SHOW_RANKING") {
-        gameState.status = 'ranking';
+        if (gameState.currentQuestionIndex === gameState.totalQuestions) {
+          gameState.status = 'finished';
+        } else {
+          gameState.status = 'ranking';
+        }
         const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
         broadcast({ type: "RANKING_UPDATE", participants, gameState });
       }
 
       if (payload.type === "RESET_GAME") {
-        db.prepare("DELETE FROM participants").run();
+        db.prepare("UPDATE participants SET points = 0, last_points = 0").run();
         db.prepare("DELETE FROM answers").run();
         gameState = { ...gameState, currentQuestionId: null, status: 'waiting', questionStartTime: 0, countdown: 0 };
-        broadcast({ type: "SYNC", participants: [], gameState });
+        const participants = db.prepare("SELECT * FROM participants ORDER BY points DESC LIMIT 500").all();
+        broadcast({ type: "SYNC", participants, gameState });
       }
     } catch (e) {
       console.error("WebSocket message error:", e);

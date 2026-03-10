@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { Trophy, Users, Timer, RotateCcw, PartyPopper, Crown, Star } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { Participant } from '../types';
 
 interface LeaderboardScreenProps {
   participants: Participant[];
   currentParticipantId?: string | null;
+  isFinal?: boolean;
 }
 
-export default function LeaderboardScreen({ participants, currentParticipantId }: LeaderboardScreenProps) {
+export default function LeaderboardScreen({ participants, currentParticipantId, isFinal }: LeaderboardScreenProps) {
   const [showPodium, setShowPodium] = useState(false);
   const sortedParticipants = [...participants].sort((a, b) => b.points - a.points);
   const top3 = sortedParticipants.slice(0, 3);
@@ -27,20 +29,48 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
 
   useEffect(() => {
     const timer = setTimeout(() => setShowPodium(true), 500);
+    
+    if (isFinal && top3.length > 0) {
+      const duration = 15 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+      const interval: any = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+      }, 250);
+      
+      return () => {
+        clearTimeout(timer);
+        clearInterval(interval);
+      };
+    }
+
     return () => clearTimeout(timer);
-  }, []);
+  }, [isFinal]);
 
   return (
-    <div className="flex-1 flex flex-col items-center py-6 md:py-10 px-4 md:px-20 w-full overflow-x-hidden">
+    <div className={`flex-1 flex flex-col items-center py-6 md:py-10 px-4 md:px-20 w-full overflow-x-hidden ${isFinal ? 'bg-gradient-to-b from-slate-950 via-primary/10 to-slate-950' : ''}`}>
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         className="text-center mb-6 md:mb-12"
       >
         <h1 className="text-2xl md:text-6xl font-black mb-2 tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-400">
-          Placar do Quiz
+          {isFinal ? '🏆 CAMPEÕES DO QUIZ 🏆' : 'Placar do Quiz'}
         </h1>
-        <p className="text-slate-400 text-xs md:text-lg">A competição está pegando fogo! 🔥</p>
+        <p className="text-slate-400 text-xs md:text-lg">
+          {isFinal ? 'Parabéns aos grandes vencedores!' : 'A competição está pegando fogo! 🔥'}
+        </p>
       </motion.div>
 
       {/* Podium Section */}
@@ -69,6 +99,16 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
                 className={`flex flex-col items-center w-1/3 ${isFirst ? '-mt-4 md:-mt-8 z-10' : ''}`}
               >
                 <div className="relative mb-2 md:mb-4">
+                  {isFirst && (
+                    <motion.div 
+                      animate={{ 
+                        scale: [1, 1.4, 1],
+                        opacity: [0.3, 0.6, 0.3] 
+                      }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="absolute inset-0 bg-yellow-400/20 blur-[40px] rounded-full -z-10"
+                    />
+                  )}
                   {isFirst && (
                     <motion.div 
                       animate={{ y: [0, -10, 0], rotate: [0, 5, -5, 0] }}
@@ -120,7 +160,12 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
               </div>
               <div className="flex flex-col flex-1">
                 <p className="font-bold text-white">{p.name}</p>
-                {p.id === currentParticipantId && <p className="text-[10px] text-primary font-black uppercase tracking-widest">Você</p>}
+                <div className="flex items-center gap-2">
+                  {p.id === currentParticipantId && <p className="text-[10px] text-primary font-black uppercase tracking-widest">Você</p>}
+                  {p.last_points !== undefined && p.last_points > 0 && (
+                    <p className="text-[10px] text-green-400 font-bold">+{p.last_points.toLocaleString()}</p>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <p className="font-black text-primary">{p.points.toLocaleString()} pts</p>
@@ -148,7 +193,12 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
               </div>
               <div className="flex flex-col flex-1">
                 <p className="font-bold text-white">{myData.name}</p>
-                <p className="text-[10px] text-primary font-black uppercase tracking-widest">Sua Posição</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] text-primary font-black uppercase tracking-widest">Sua Posição</p>
+                  {myData.last_points !== undefined && myData.last_points > 0 && (
+                    <p className="text-[10px] text-green-400 font-bold">+{myData.last_points.toLocaleString()}</p>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <p className="font-black text-primary">{myData.points.toLocaleString()} pts</p>
@@ -159,6 +209,17 @@ export default function LeaderboardScreen({ participants, currentParticipantId }
       </div>
 
       <div className="mt-12 flex flex-col items-center gap-6">
+        <div className="bg-slate-900/50 p-6 rounded-3xl border border-white/10 max-w-lg text-center">
+          <h4 className="text-sm font-black text-white uppercase tracking-widest mb-3 flex items-center justify-center gap-2">
+            <Star size={16} className="text-yellow-400" /> Como funciona a pontuação?
+          </h4>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Acertar garante <span className="text-white font-bold">1.000 pontos base</span>. 
+            Quanto mais rápido você responder, mais <span className="text-primary font-bold">bônus de velocidade</span> você ganha (até +1.000 pontos)! 
+            Respostas erradas não somam pontos.
+          </p>
+        </div>
+        
         <div className="flex items-center gap-8 text-slate-500 font-bold text-sm">
           <div className="flex items-center gap-2">
             <Users size={18} className="text-primary" />

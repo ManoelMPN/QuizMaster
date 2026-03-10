@@ -52,11 +52,11 @@ export async function getQuizzes(): Promise<Quiz[]> {
   return handleResponse(res);
 }
 
-export async function createQuiz(title: string): Promise<Quiz> {
+export async function createQuiz(title: string, backgroundUrl?: string): Promise<Quiz> {
   const res = await fetch('/api/quizzes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, backgroundUrl }),
   });
   return handleResponse(res);
 }

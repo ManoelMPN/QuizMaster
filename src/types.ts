@@ -5,6 +5,7 @@ export interface Participant {
   avatar: string;
   status?: string;
   joinedAt: number;
+  last_points?: number;
 }
 
 export interface User {
@@ -18,6 +19,7 @@ export interface Quiz {
   id: string;
   title: string;
   userId: string;
+  backgroundUrl?: string;
   createdAt: number;
 }
 
@@ -28,15 +30,18 @@ export interface Question {
   options: string[];
   correctOption: number;
   timeLimit: number; // seconds
+  backgroundUrl?: string;
 }
 
 export interface GameState {
   currentQuestionId: string | null;
   activeQuizId: string | null;
-  status: 'waiting' | 'countdown' | 'question' | 'ranking' | 'finished';
+  status: 'waiting' | 'countdown' | 'question' | 'answer' | 'ranking' | 'finished';
   questionStartTime?: number;
   countdown?: number;
   roomCode?: string;
+  totalQuestions?: number;
+  currentQuestionIndex?: number;
 }
 
 export type Screen = 'home' | 'auth' | 'join' | 'leaderboard' | 'admin' | 'participant';

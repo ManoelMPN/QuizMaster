@@ -2,30 +2,110 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { QrCode, Users, Timer, Link2, Copy, RefreshCw, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import LeaderboardScreen from './LeaderboardScreen';
 import QRCodeModal from './QRCodeModal';
-import { Participant, GameState } from '../types';
+import { Participant, GameState, Question } from '../types';
 
 interface JoinScreenProps {
   participants: Participant[];
   gameState: GameState;
+  currentQuestion: Question | null;
   onAdminLogin: () => void;
   onRegenerateCode: () => void;
 }
 
-export default function JoinScreen({ participants, gameState, onAdminLogin, onRegenerateCode }: JoinScreenProps) {
+export default function JoinScreen({ participants, gameState, currentQuestion, onAdminLogin, onRegenerateCode }: JoinScreenProps) {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const roomCode = gameState.roomCode || "------";
   
   // Use current origin or APP_URL if we want to be explicit
   const joinUrl = `${window.location.origin}/join?code=${roomCode}`;
 
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden">
-      {/* Background elements */}
-      <div className="absolute top-0 left-0 w-full h-full -z-10 opacity-20">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/30 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/30 blur-[120px] rounded-full" />
+  const [activeQuiz, setActiveQuiz] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (gameState.activeQuizId) {
+      fetch(`/api/quizzes`)
+        .then(res => res.json())
+        .then(quizzes => {
+          const found = quizzes.find((q: any) => q.id === gameState.activeQuizId);
+          setActiveQuiz(found);
+        });
+    }
+  }, [gameState.activeQuizId]);
+
+  if (gameState.status === 'ranking' || gameState.status === 'finished') {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col">
+        <LeaderboardScreen 
+          participants={participants} 
+          isFinal={gameState.status === 'finished'} 
+        />
       </div>
+    );
+  }
+
+  if (gameState.status === 'question' && currentQuestion) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center p-10 relative overflow-hidden">
+        {currentQuestion.backgroundUrl && (
+          <div 
+            className="absolute inset-0 -z-10 bg-cover bg-center opacity-40"
+            style={{ backgroundImage: `url(${currentQuestion.backgroundUrl})` }}
+          />
+        )}
+        <div className="max-w-5xl w-full space-y-12 text-center">
+          <div className="inline-flex items-center gap-4 px-6 py-3 rounded-full bg-primary/20 border border-primary/30 text-primary font-black text-2xl">
+            <Timer size={32} className="animate-pulse" />
+            {currentQuestion.timeLimit}s
+          </div>
+          <h1 className="text-5xl md:text-7xl font-black text-white leading-tight">
+            {currentQuestion.text}
+          </h1>
+          <div className="grid grid-cols-2 gap-6">
+            {currentQuestion.options.map((opt, idx) => (
+              <div key={idx} className="p-8 bg-slate-900/80 border-2 border-white/10 rounded-[2rem] text-3xl font-bold text-white">
+                {opt}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.status === 'answer' && currentQuestion) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center p-10 relative overflow-hidden">
+        <div className="max-w-5xl w-full space-y-12 text-center">
+          <h1 className="text-4xl font-black text-slate-400 uppercase tracking-widest">Resposta Correta</h1>
+          <div className="p-12 bg-green-500/20 border-4 border-green-500 rounded-[3rem] shadow-[0_0_50px_rgba(34,197,94,0.3)]">
+            <h2 className="text-6xl md:text-8xl font-black text-white">
+              {currentQuestion.options[currentQuestion.correctOption]}
+            </h2>
+          </div>
+          <div className="pt-12">
+             <p className="text-slate-500 text-2xl font-bold animate-pulse">Aguardando o próximo round...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden min-h-screen">
+      {/* Background elements */}
+      {activeQuiz?.backgroundUrl ? (
+        <div 
+          className="absolute inset-0 -z-10 bg-cover bg-center transition-all duration-1000"
+          style={{ backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.95)), url(${activeQuiz.backgroundUrl})` }}
+        />
+      ) : (
+        <div className="absolute top-0 left-0 w-full h-full -z-10 opacity-20">
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/30 blur-[120px] rounded-full" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/30 blur-[120px] rounded-full" />
+        </div>
+      )}
 
       <button 
         onClick={onAdminLogin}

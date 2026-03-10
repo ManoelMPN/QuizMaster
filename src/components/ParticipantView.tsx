@@ -140,8 +140,14 @@ export default function ParticipantView({ participantId, participantName, gameSt
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="w-full space-y-8"
+            className="w-full space-y-8 relative z-10"
           >
+            {currentQuestion.backgroundUrl && (
+              <div 
+                className="fixed inset-0 -z-10 bg-cover bg-center opacity-30"
+                style={{ backgroundImage: `url(${currentQuestion.backgroundUrl})` }}
+              />
+            )}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 text-primary font-bold">
                 <Timer size={20} />
@@ -185,7 +191,38 @@ export default function ParticipantView({ participantId, participantName, gameSt
           </motion.div>
         )}
 
-        {gameState.status === 'ranking' && (
+        {gameState.status === 'answer' && currentQuestion && (
+          <motion.div 
+            key="answer"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="w-full text-center space-y-8"
+          >
+            {selectedOption === currentQuestion.correctOption ? (
+              <div className="space-y-4">
+                <div className="size-24 bg-green-500/20 rounded-full flex items-center justify-center text-green-500 mx-auto">
+                  <CheckCircle2 size={64} />
+                </div>
+                <h2 className="text-4xl font-black text-white">CORRETO!</h2>
+                <p className="text-slate-400 font-bold">Você foi rápido! +1000 pontos</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="size-24 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 mx-auto">
+                  <XCircle size={64} />
+                </div>
+                <h2 className="text-4xl font-black text-white">OPS...</h2>
+                <p className="text-slate-400 font-bold">A resposta era: <span className="text-green-500">{currentQuestion.options[currentQuestion.correctOption]}</span></p>
+              </div>
+            )}
+            <div className="pt-8">
+              <p className="text-slate-500 animate-pulse">Aguardando o próximo round...</p>
+            </div>
+          </motion.div>
+        )}
+
+        {(gameState.status === 'ranking' || gameState.status === 'finished') && (
           <motion.div 
             key="ranking"
             initial={{ opacity: 0, scale: 0.9 }}
@@ -196,6 +233,7 @@ export default function ParticipantView({ participantId, participantName, gameSt
             <LeaderboardScreen 
               participants={participants} 
               currentParticipantId={participantId} 
+              isFinal={gameState.status === 'finished'}
             />
           </motion.div>
         )}
